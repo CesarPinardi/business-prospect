@@ -1,0 +1,275 @@
+import { Icon } from "./prospecting-icons";
+import type { IconName, ViewId } from "./prospecting-workspace-types";
+
+export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
+  return (
+    <section className="view" aria-labelledby="dashboard-title">
+      <div className="hero-grid">
+        <div className="page-intro">
+          <p className="eyebrow">Wednesday, September 2</p>
+          <h1 id="dashboard-title">Good morning, prospector.</h1>
+          <p className="intro-copy">Find the right local businesses, start useful conversations, and keep every follow-up in view.</p>
+          <button className="button button-primary" type="button" onClick={() => onNavigate("search")}>
+            Start a search <Icon name="arrow" />
+          </button>
+        </div>
+        <div className="hero-art" aria-hidden="true">
+          <div className="orbit orbit-one" />
+          <div className="orbit orbit-two" />
+          <div className="hero-pin"><Icon name="map" /></div>
+          <span className="hero-spark spark-one">✦</span>
+          <span className="hero-spark spark-two">·</span>
+          <span className="hero-spark spark-three">✦</span>
+        </div>
+      </div>
+
+      <div className="stats-grid" aria-label="Workspace overview">
+        <StatCard label="Saved leads" value="0" detail="Ready for your first find" icon="leads" tone="mint" />
+        <StatCard label="Active follow-ups" value="0" detail="Nothing due today" icon="activity" tone="peach" />
+        <StatCard label="Searches this week" value="0" detail="Demo search is available" icon="search" tone="lavender" />
+      </div>
+
+      <div className="dashboard-grid">
+        <section className="panel activity-panel" aria-labelledby="activity-title">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Keep momentum</p>
+              <h2 id="activity-title">Recent activity</h2>
+            </div>
+            <button className="text-button" type="button" onClick={() => onNavigate("pipeline")}>View pipeline <Icon name="arrow" /></button>
+          </div>
+          <EmptyState
+            icon="activity"
+            title="Your workspace is clear"
+            description="Search for a business to start building your prospect list."
+            actionLabel="Explore Search"
+            onAction={() => onNavigate("search")}
+            compact
+          />
+        </section>
+
+        <section className="panel mode-panel" aria-labelledby="mode-title">
+          <div className="mode-panel-top">
+            <div className="mode-icon"><Icon name="spark" /></div>
+            <span className="live-label"><span className="status-dot" /> Active</span>
+          </div>
+          <p className="eyebrow">Current provider</p>
+          <h2 id="mode-title">Demo mode</h2>
+          <p>Explore the workspace with deterministic sample data. No Google key or external service is needed.</p>
+          <div className="mode-divider" />
+          <p className="mode-footnote"><Icon name="activity" /> Local-first by design</p>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+export function SearchView() {
+  return (
+    <section className="view" aria-labelledby="search-title">
+      <ViewIntro
+        eyebrow="Prospecting workspace"
+        title="Find your next conversation."
+        titleId="search-title"
+        description="Set a location and niche to discover local businesses worth reaching out to."
+      />
+
+      <div className="search-shell">
+        <div className="search-form-panel panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Search setup</p>
+              <h2>Define your area</h2>
+            </div>
+            <div className="step-badge">01 <span>of</span> 01</div>
+          </div>
+          <div className="form-stack">
+            <label className="field-label" htmlFor="search-city">City</label>
+            <select className="field-control" id="search-city" defaultValue="">
+              <option value="">Select a city</option>
+              <option value="jundiai">Jundiaí, Brazil</option>
+              <option value="sao-paulo">São Paulo, Brazil</option>
+              <option value="lisbon">Lisbon, Portugal</option>
+            </select>
+
+            <label className="field-label" htmlFor="search-niche">Business niche</label>
+            <input className="field-control" id="search-niche" type="text" placeholder="e.g. dental clinics, coffee shops" />
+
+            <label className="field-label" htmlFor="search-radius">Radius</label>
+            <select className="field-control" id="search-radius" defaultValue="5">
+              <option value="1">1 km</option>
+              <option value="3">3 km</option>
+              <option value="5">5 km</option>
+              <option value="10">10 km</option>
+            </select>
+          </div>
+          <div className="form-note"><Icon name="spark" /> Demo results will use sample businesses and stay on this device.</div>
+          <button className="button button-primary button-wide" type="button" disabled>
+            Search businesses <Icon name="arrow" />
+          </button>
+          <p className="disabled-note">Search setup is ready for your first Demo search.</p>
+        </div>
+
+        <div className="search-empty panel">
+          <div className="empty-map" aria-hidden="true">
+            <div className="map-grid" />
+            <div className="map-circle" />
+            <div className="map-marker marker-left"><Icon name="map" /></div>
+            <div className="map-marker marker-right"><Icon name="map" /></div>
+            <div className="map-marker marker-center"><Icon name="map" /></div>
+          </div>
+          <EmptyState
+            icon="search"
+            title="No search results yet"
+            description="Choose a city and niche to see matching businesses here."
+            compact
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function LeadsView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
+  return (
+    <section className="view" aria-labelledby="leads-title">
+      <ViewIntro
+        eyebrow="Your prospects"
+        title="Leads worth following."
+        titleId="leads-title"
+        description="Businesses you choose to save will live here, ready for a thoughtful next step."
+      />
+      <section className="panel full-empty-panel">
+        <EmptyState
+          icon="leads"
+          title="No leads saved yet"
+          description="Your saved businesses will appear here. Start with a Demo search and choose the prospects that feel like a fit."
+          actionLabel="Find businesses"
+          onAction={() => onNavigate("search")}
+        />
+      </section>
+    </section>
+  );
+}
+
+export function PipelineView() {
+  const pipelineStages = ["New", "Contacted", "Interested", "Follow-up", "Won", "Not interested"];
+
+  return (
+    <section className="view" aria-labelledby="pipeline-title">
+      <ViewIntro
+        eyebrow="Move conversations forward"
+        title="Your pipeline, at a glance."
+        titleId="pipeline-title"
+        description="Keep every prospect moving from first hello to a clear outcome."
+      />
+      <div className="stage-strip" aria-label="Pipeline stages">
+        {pipelineStages.map((stage, index) => (
+          <div className="stage-chip" key={stage}>
+            <span className="stage-number">0{index + 1}</span>
+            <span>{stage}</span>
+          </div>
+        ))}
+      </div>
+      <section className="panel full-empty-panel pipeline-empty-panel">
+        <EmptyState
+          icon="pipeline"
+          title="Your pipeline is clear"
+          description="Saved leads will land in New. From there, you can keep the next action visible without losing the thread."
+          compact
+        />
+      </section>
+    </section>
+  );
+}
+
+export function SettingsView() {
+  return (
+    <section className="view" aria-labelledby="settings-title">
+      <ViewIntro
+        eyebrow="Make it yours"
+        title="Your workspace settings."
+        titleId="settings-title"
+        description="A few details will make future outreach feel personal and ready to send."
+      />
+      <section className="panel settings-panel">
+        <div className="settings-header">
+          <div className="settings-icon"><Icon name="profile" /></div>
+          <div>
+            <p className="eyebrow">Personal profile</p>
+            <h2>No profile details yet</h2>
+            <p>Set up your name, business, service, and base message when you are ready.</p>
+          </div>
+        </div>
+        <div className="settings-preview-grid">
+          <SettingPreview label="Your name" />
+          <SettingPreview label="Business name" />
+          <SettingPreview label="Offered service" />
+          <SettingPreview label="Base message" wide />
+        </div>
+        <button className="button button-secondary" type="button" disabled>Profile settings coming next</button>
+      </section>
+    </section>
+  );
+}
+
+function ViewIntro({ eyebrow, title, titleId, description }: { eyebrow: string; title: string; titleId: string; description: string }) {
+  return (
+    <div className="page-intro compact-intro">
+      <p className="eyebrow">{eyebrow}</p>
+      <h1 id={titleId}>{title}</h1>
+      <p className="intro-copy">{description}</p>
+    </div>
+  );
+}
+
+function SettingPreview({ label, wide = false }: { label: string; wide?: boolean }) {
+  return (
+    <div className={`setting-preview${wide ? " setting-preview-wide" : ""}`}>
+      <span>{label}</span>
+      <strong>Not set</strong>
+    </div>
+  );
+}
+
+function StatCard({ label, value, detail, icon, tone }: { label: string; value: string; detail: string; icon: IconName; tone: string }) {
+  return (
+    <div className={`stat-card stat-${tone}`}>
+      <div className="stat-card-heading">
+        <span className="stat-icon"><Icon name={icon} /></span>
+        <span>{label}</span>
+      </div>
+      <strong className="stat-value">{value}</strong>
+      <span className="stat-detail">{detail}</span>
+    </div>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+  compact = false,
+}: {
+  icon: IconName;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`empty-state${compact ? " empty-state-compact" : ""}`}>
+      <div className="empty-icon"><Icon name={icon} /></div>
+      <div className="empty-copy">
+        <h3>{title}</h3>
+        <p>{description}</p>
+        {actionLabel && onAction && (
+          <button className="text-button" type="button" onClick={onAction}>{actionLabel} <Icon name="arrow" /></button>
+        )}
+      </div>
+    </div>
+  );
+}
