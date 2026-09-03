@@ -1072,6 +1072,12 @@ button:disabled {
 
 .candidate-title-row h3 { margin: 0; font-size: 14px; }
 
+.save-lead-button { flex: 0 0 auto; min-height: 30px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--paper); color: var(--ink); font-size: 10px; font-weight: 700; }
+
+.save-lead-button:hover { border-color: var(--mint-strong); color: var(--mint-strong); }
+
+.save-lead-button:disabled { background: var(--mint); color: var(--mint-strong); opacity: 0.8; }
+
 .candidate-title-row p, .candidate-address { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
 
 .candidate-address { color: var(--ink-soft); font-size: 11px; }
@@ -1150,6 +1156,16 @@ button:disabled {
 .save-state-saved { color: var(--mint-strong); }
 
 .field-error { color: #b55237; font-size: 10px; }
+
+.lead-list { display: grid; gap: 10px; }
+
+.lead-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 17px; }
+
+.lead-card h2 { margin: 5px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px; letter-spacing: -0.04em; }
+
+.lead-card p:not(.eyebrow) { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
+
+.lead-source { color: var(--mint-strong); font-family: 'DM Mono', monospace; font-size: 9px; white-space: nowrap; }
 
 @media (max-width: 700px) {
   .settings-form-grid { grid-template-columns: 1fr; }

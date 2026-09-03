@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { candidateWithinRadius, createInitialState, createId, filterCandidates, getCity, getDemoProviderPage } from "./prospecting-domain";
+import { candidateWithinRadius, createInitialState, createId, filterCandidates, getCity, getDemoProviderPage, getLeadByProviderId } from "./prospecting-domain";
 import { loadAppState, saveAppState } from "./prospecting-storage";
 import {
   DashboardView,
@@ -12,7 +12,7 @@ import {
   SearchView,
   SettingsView,
 } from "./prospecting-workspace-views";
-import type { AppState, CandidateSelectionSource, IconName, SearchCriteria, SearchRecord, SearchSession, ViewId } from "./prospecting-workspace-types";
+import type { AppState, Candidate, CandidateSelectionSource, IconName, SearchCriteria, SearchRecord, SearchSession, ViewId } from "./prospecting-workspace-types";
 
 type NavigationItem = {
   id: ViewId;
@@ -111,6 +111,21 @@ export function ProspectingWorkspace() {
     if (session) setSession({ ...session, selectedCandidateId: candidateId, selectionSource: source });
   }, [session]);
 
+  const handleSaveCandidate = useCallback(async (candidate: Candidate): Promise<"saved" | "already-saved" | "error"> => {
+    if (!session?.searchId) return "error";
+    const searchId = session.searchId;
+    const currentState = stateRef.current;
+    const existing = getLeadByProviderId(currentState.leads, candidate.providerId);
+    if (existing) {
+      if (existing.searchIds.includes(searchId)) return "already-saved";
+      const next = { ...currentState, leads: currentState.leads.map((lead) => lead.id === existing.id ? { ...lead, searchIds: [...lead.searchIds, searchId], updatedAt: new Date().toISOString() } : lead) };
+      return await commit(next) ? "already-saved" : "error";
+    }
+    const now = new Date().toISOString();
+    const lead = { id: createId("lead"), providerId: candidate.providerId, candidate, searchIds: [searchId], status: "New" as const, note: "", outreachMessage: "", createdAt: now, updatedAt: now };
+    return await commit({ ...currentState, leads: [...currentState.leads, lead] }) ? "saved" : "error";
+  }, [commit, session]);
+
   const updateSearchRecord = useCallback(async (searchId: string, update: (search: SearchRecord) => SearchRecord): Promise<boolean> => {
     const currentState = stateRef.current;
     const search = currentState.searches.find((item) => item.id === searchId);
@@ -178,7 +193,7 @@ export function ProspectingWorkspace() {
             >
               <Icon name={item.icon} />
               <span>{item.label}</span>
-              {item.id === "leads" && <span className="nav-count" aria-hidden="true">0</span>}
+              {item.id === "leads" && <span className="nav-count" aria-hidden="true">{state.leads.length}</span>}
             </button>
           ))}
         </nav>
@@ -211,8 +226,8 @@ export function ProspectingWorkspace() {
 
         <main className="page-content">
           {activeView === "dashboard" && <DashboardView onNavigate={setActiveView} />}
-          {activeView === "search" && <SearchView session={session} nicheHistory={state.nicheHistory} onSearch={handleSearch} onChangeCriteria={handleCriteriaChange} onChangePage={handlePageChange} onLoadMore={handleLoadMore} onSelectCandidate={handleSelectCandidate} />}
-          {activeView === "leads" && <LeadsView onNavigate={setActiveView} />}
+          {activeView === "search" && <SearchView session={session} nicheHistory={state.nicheHistory} savedProviderIds={new Set(state.leads.map((lead) => lead.providerId))} onSearch={handleSearch} onChangeCriteria={handleCriteriaChange} onChangePage={handlePageChange} onLoadMore={handleLoadMore} onSelectCandidate={handleSelectCandidate} onSaveCandidate={handleSaveCandidate} />}
+          {activeView === "leads" && <LeadsView leads={state.leads} onNavigate={setActiveView} />}
           {activeView === "pipeline" && <PipelineView />}
           {activeView === "settings" && <SettingsView settings={state.settings} onSave={handleSaveSettings} persistenceError={persistenceError} />}
         </main>

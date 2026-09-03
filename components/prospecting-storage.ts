@@ -28,7 +28,7 @@ function normalizeState(value: unknown): AppState | undefined {
   if (!value || typeof value !== "object") return undefined;
   const parsed = value as Partial<AppState>;
   const defaults = createInitialState();
-  return { ...defaults, ...parsed, settings: { ...defaults.settings, ...(parsed.settings ?? {}) }, searches: Array.isArray(parsed.searches) ? parsed.searches : [], nicheHistory: Array.isArray(parsed.nicheHistory) ? parsed.nicheHistory : [] };
+  return { ...defaults, ...parsed, settings: { ...defaults.settings, ...(parsed.settings ?? {}) }, searches: Array.isArray(parsed.searches) ? parsed.searches : [], leads: Array.isArray(parsed.leads) ? parsed.leads : [], nicheHistory: Array.isArray(parsed.nicheHistory) ? parsed.nicheHistory : [] };
 }
 
 function parseState(raw: string | null | undefined): AppState | undefined {
