@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CITIES, candidateWithinRadius, generateDemoCandidates, getDemoProviderPage } from "../components/prospecting-domain";
+import { CITIES, candidateWithinRadius, filterCandidates, generateDemoCandidates, getCurrentPage, getDemoProviderPage, sortCandidates } from "../components/prospecting-domain";
 
 describe("Demo search provider", () => {
   it("returns stable varied candidates and pages", () => {
@@ -26,5 +26,18 @@ describe("Demo search provider", () => {
       ["São Paulo, Brazil", "Brazil", "demo:city:sao-paulo"],
       ["Lisbon, Portugal", "Portugal", "demo:city:lisbon"],
     ]);
+  });
+
+  it("combines availability filters and deterministic sort and page boundaries", () => {
+    const candidates = generateDemoCandidates(CITIES[0], "dentist");
+    const criteria = { cityId: "jundiai", niche: "dentist", radiusKm: 10, websiteFilter: "listed" as const, photoFilter: "not-listed" as const, phoneFilter: "listed" as const, sort: "distance" as const };
+    const filtered = filterCandidates(candidates, criteria);
+    expect(filtered.every((candidate) => candidate.website && !candidate.photoUrl && candidate.phone)).toBe(true);
+    expect(sortCandidates(candidates, "relevance")[0].relevanceOrder).toBe(0);
+    expect(sortCandidates(candidates, "distance")[0].distanceKm).toBeLessThanOrEqual(sortCandidates(candidates, "distance")[1].distanceKm);
+    expect(sortCandidates(candidates, "name").map((candidate) => candidate.name)).toEqual([...candidates].sort((a, b) => a.name.localeCompare(b.name)).map((candidate) => candidate.name));
+    const inside = candidates.filter((candidate) => candidateWithinRadius(candidate, CITIES[0], 10));
+    expect(getCurrentPage(inside, { ...criteria, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" }, 1)).toHaveLength(10);
+    expect(getCurrentPage(inside, { ...criteria, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" }, 3)).toHaveLength(inside.length - 20);
   });
 });

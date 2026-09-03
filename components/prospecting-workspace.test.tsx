@@ -79,4 +79,27 @@ describe("ProspectingWorkspace", () => {
     fireEvent.click(screen.getByRole("heading", { name: "Aurora Dental Studio" }));
     await waitFor(() => expect(document.activeElement).toHaveAttribute("id", "marker-demo:place:jundiai:01"));
   });
+
+  it("filters, sorts, paginates, and loads the next Demo page", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "jundiai" } });
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "dentist" } });
+    fireEvent.change(screen.getByLabelText("Radius"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Website" }), { target: { value: "not-listed" } });
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Website" })).toHaveValue("not-listed"));
+    expect(screen.getAllByText("No website listed").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByRole("combobox", { name: "Website" }), { target: { value: "all" } });
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Website" })).toHaveValue("all"));
+    fireEvent.click(screen.getByRole("button", { name: "Load 10 more" }));
+    await waitFor(() => expect(screen.getByText("20 loaded")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(screen.getByText(/Page 2 of/)).toBeInTheDocument());
+    expect(screen.getAllByTestId("map-marker").length).toBeLessThanOrEqual(10);
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    await waitFor(() => expect(screen.getByText(/Page 1 of/)).toBeInTheDocument());
+  });
 });

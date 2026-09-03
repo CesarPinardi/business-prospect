@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { CITIES, validateSettings } from "./prospecting-domain";
-import type { Candidate, CandidateSelectionSource, IconName, ProfileSettings, SearchCriteria, SearchSession, ViewId } from "./prospecting-workspace-types";
+import { CITIES, filterCandidates, getCurrentPage, validateSettings } from "./prospecting-domain";
+import type { Candidate, CandidateSelectionSource, IconName, ProfileSettings, SearchCriteria, SearchFilter, SearchSession, SearchSort, ViewId } from "./prospecting-workspace-types";
+
+const filterOptions: { value: SearchFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "listed", label: "Listed" },
+  { value: "not-listed", label: "Not listed" },
+];
 
 export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
   return (
@@ -67,12 +73,19 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
   );
 }
 
-export function SearchView({ session, nicheHistory, onSearch, onSelectCandidate }: { session: SearchSession | null; nicheHistory: string[]; onSearch: (criteria: SearchCriteria) => void; onSelectCandidate: (candidateId: string, source: CandidateSelectionSource) => void }) {
+export function SearchView({ session, nicheHistory, onSearch, onChangeCriteria, onChangePage, onLoadMore, onSelectCandidate }: { session: SearchSession | null; nicheHistory: string[]; onSearch: (criteria: SearchCriteria) => void; onChangeCriteria: (criteria: SearchCriteria) => Promise<boolean>; onChangePage: (page: number) => void; onLoadMore: () => Promise<void>; onSelectCandidate: (candidateId: string, source: CandidateSelectionSource) => void }) {
   const emptyCriteria: SearchCriteria = { cityId: "", niche: "", radiusKm: 5, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" };
   const [criteria, setCriteria] = useState<SearchCriteria>(session?.criteria ?? emptyCriteria);
   const canSearch = Boolean(criteria.cityId && criteria.niche.trim() && Number.isInteger(criteria.radiusKm) && criteria.radiusKm >= 1 && criteria.radiusKm <= 10);
-  const currentPage = session?.candidates ?? [];
+  const currentCriteria = session?.criteria ?? criteria;
+  const currentPage = session ? getCurrentPage(session.candidates, currentCriteria, session.currentPage) : [];
+  const totalFiltered = session ? filterCandidates(session.candidates, currentCriteria).length : 0;
   const selectedCandidate = currentPage.find((candidate) => candidate.providerId === session?.selectedCandidateId) ?? currentPage[0];
+
+  async function updateCriteria(partial: Partial<SearchCriteria>) {
+    const next = { ...currentCriteria, ...partial };
+    if (await onChangeCriteria(next)) setCriteria(next);
+  }
 
   useEffect(() => {
     if (!session?.selectedCandidateId || !session.selectionSource) return;
@@ -100,7 +113,7 @@ export function SearchView({ session, nicheHistory, onSearch, onSelectCandidate 
           {!canSearch && <p className="disabled-note">Select a city, enter a niche, and choose a radius from 1 to 10 km.</p>}
           {session?.status === "error" && <p className="form-error" role="alert">{session.error}</p>}
         </form>
-        {!session ? <div className="search-empty panel"><EmptyState icon="search" title="No search results yet" description="Choose a city and niche to see matching businesses here." compact /></div> : session.status === "loading" ? <div className="search-empty panel" role="status"><div className="loading-state"><span className="loading-spinner" /><h2>Loading Demo businesses…</h2><p>Checking the selected radius and preparing sample results.</p></div></div> : session.status === "error" ? <div className="search-empty panel"><EmptyState icon="search" title="The Demo provider is unavailable" description="Your existing results were kept. Try the search again in a moment." compact /></div> : <section className="results-panel panel" aria-labelledby="results-title"><div className="results-header"><div><p className="eyebrow">{session.city.displayName} · {session.criteria.radiusKm} km radius</p><h2 id="results-title">Demo businesses</h2></div><span className="result-disclosure">{session.candidates.length} loaded</span></div><p className="disclosure-copy">Sample data only. This is not every business in the area.</p><div className="results-map-list"><DemoMap city={session.city} radiusKm={session.criteria.radiusKm} candidates={currentPage} selectedCandidateId={selectedCandidate?.providerId} onSelect={(candidateId) => onSelectCandidate(candidateId, "marker")} /><div className="result-list" aria-label="Current search results">{currentPage.length ? currentPage.map((candidate) => <CandidateCard candidate={candidate} key={candidate.providerId} selected={candidate.providerId === selectedCandidate?.providerId} onSelect={() => onSelectCandidate(candidate.providerId, "card")} />) : <p className="no-results">No businesses were found inside this radius.</p>}</div></div></section>}
+        {!session ? <div className="search-empty panel"><EmptyState icon="search" title="No search results yet" description="Choose a city and niche to see matching businesses here." compact /></div> : session.status === "loading" ? <div className="search-empty panel" role="status"><div className="loading-state"><span className="loading-spinner" /><h2>Loading Demo businesses…</h2><p>Checking the selected radius and preparing sample results.</p></div></div> : session.status === "error" ? <div className="search-empty panel"><EmptyState icon="search" title="The Demo provider is unavailable" description="Your existing results were kept. Try the search again in a moment." compact /></div> : <section className="results-panel panel" aria-labelledby="results-title"><div className="results-header"><div><p className="eyebrow">{session.city.displayName} · {currentCriteria.radiusKm} km radius</p><h2 id="results-title">Demo businesses</h2></div><span className="result-disclosure">{session.candidates.length} loaded</span></div><p className="disclosure-copy">Sample data only. Showing {totalFiltered} matching loaded result{totalFiltered === 1 ? "" : "s"}; this is not every business in the area.</p><div className="filter-grid" aria-label="Search result filters"><FilterControl label="Website" value={currentCriteria.websiteFilter} onChange={(value) => updateCriteria({ websiteFilter: value })} /><FilterControl label="Photo" value={currentCriteria.photoFilter} onChange={(value) => updateCriteria({ photoFilter: value })} /><FilterControl label="Phone" value={currentCriteria.phoneFilter} onChange={(value) => updateCriteria({ phoneFilter: value })} /><label className="filter-control"><span>Sort</span><select value={currentCriteria.sort} onChange={(event) => updateCriteria({ sort: event.target.value as SearchSort })}><option value="relevance">Provider relevance</option><option value="distance">Distance</option><option value="name">Business name</option></select></label></div><div className="results-map-list"><DemoMap city={session.city} radiusKm={currentCriteria.radiusKm} candidates={currentPage} selectedCandidateId={selectedCandidate?.providerId} onSelect={(candidateId) => onSelectCandidate(candidateId, "marker")} /><div className="result-list" aria-label="Current search results">{currentPage.length ? currentPage.map((candidate) => <CandidateCard candidate={candidate} key={candidate.providerId} selected={candidate.providerId === selectedCandidate?.providerId} onSelect={() => onSelectCandidate(candidate.providerId, "card")} />) : <p className="no-results">No loaded businesses match these filters.</p>}</div></div><div className="results-footer"><span>Page {Math.min(session.currentPage, Math.max(1, Math.ceil(totalFiltered / 10)))} of {Math.max(1, Math.ceil(totalFiltered / 10))} · {currentPage.length} shown</span><div className="pagination-actions"><button className="button button-secondary" type="button" disabled={session.currentPage <= 1} onClick={() => onChangePage(session.currentPage - 1)}>Previous</button><button className="button button-secondary" type="button" disabled={session.currentPage >= Math.max(1, Math.ceil(totalFiltered / 10))} onClick={() => onChangePage(session.currentPage + 1)}>Next</button></div></div><div className="load-more-row"><button className="button button-primary" type="button" disabled={!session.hasNextPage} onClick={() => void onLoadMore()}>{session.hasNextPage ? "Load 10 more" : "No more Demo results"} <Icon name="arrow" /></button>{!session.hasNextPage && <span>All deterministic provider pages are loaded.</span>}</div></section>}
       </div>
     </section>
   );
@@ -113,6 +126,10 @@ function CandidateCard({ candidate, selected, onSelect }: { candidate: Candidate
 function DemoMap({ city, radiusKm, candidates, selectedCandidateId, onSelect }: { city: SearchSession["city"]; radiusKm: number; candidates: Candidate[]; selectedCandidateId?: string; onSelect: (candidateId: string) => void }) {
   const selectedCandidate = candidates.find((candidate) => candidate.providerId === selectedCandidateId);
   return <section className="demo-map" data-testid="demo-map" data-radius-km={radiusKm} aria-label={`Demo map centered on ${city.displayName}, radius ${radiusKm} km`}><div className="map-grid" /><div className="map-radius-circle"><span>{radiusKm} km</span></div><div className="map-center" aria-hidden="true"><Icon name="map" /></div>{candidates.map((candidate, index) => <button id={`marker-${candidate.providerId}`} className={`demo-map-marker${selectedCandidateId === candidate.providerId ? " is-selected" : ""}`} data-testid="map-marker" key={candidate.providerId} type="button" aria-label={`Show ${candidate.name} on map`} onClick={() => onSelect(candidate.providerId)}><span>{index + 1}</span></button>)}{selectedCandidate && <div className="map-summary" role="status"><strong>{selectedCandidate.name}</strong><span>Markers show only this page.</span></div>}</section>;
+}
+
+function FilterControl({ label, value, onChange }: { label: string; value: SearchFilter; onChange: (value: SearchFilter) => void }) {
+  return <label className="filter-control"><span>{label}</span><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value as SearchFilter)}>{filterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
 export function LeadsView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
