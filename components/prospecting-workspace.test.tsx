@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProspectingWorkspace } from "./prospecting-workspace";
 import { resetStorageForTests, STORAGE_KEY } from "./prospecting-storage";
@@ -150,6 +150,28 @@ describe("ProspectingWorkspace", () => {
     const persisted = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}");
     expect(persisted.leads).toHaveLength(1);
     expect(persisted.leads[0].searchIds).toHaveLength(2);
+  });
+
+  it("shows status persistence errors in the lead detail", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "jundiai" } });
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "dentist" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Save lead" })[0]);
+    expect(await screen.findByText("Lead saved.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Leads" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open lead" }));
+
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage full"); });
+    try {
+      fireEvent.change(screen.getByRole("combobox", { name: "Change status for Aurora Dental Studio" }), { target: { value: "Contacted" } });
+      expect(await screen.findByRole("alert")).toHaveTextContent("Could not save this status change");
+      expect(screen.getByRole("combobox", { name: "Change status for Aurora Dental Studio" })).toHaveValue("New");
+    } finally {
+      setItem.mockRestore();
+    }
   });
 
   it("shows a load-more provider error while keeping loaded results", async () => {
