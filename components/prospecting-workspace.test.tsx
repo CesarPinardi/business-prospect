@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { ProspectingWorkspace } from "./prospecting-workspace";
-import { resetStorageForTests } from "./prospecting-storage";
+import { resetStorageForTests, STORAGE_KEY } from "./prospecting-storage";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -111,6 +111,32 @@ describe("ProspectingWorkspace", () => {
     expect(screen.getAllByTestId("map-marker").length).toBeLessThanOrEqual(10);
     fireEvent.click(screen.getByRole("button", { name: "Previous" }));
     await waitFor(() => expect(screen.getByText(/Page 1 of/)).toBeInTheDocument());
+  });
+
+  it("saves a lead once and associates it with repeated searches", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "jundiai" } });
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "dentist" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Save lead" })[0]);
+    expect(await screen.findByText("Lead saved.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Leads" })).toHaveTextContent("1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Leads" }));
+    expect(screen.getByRole("heading", { name: "Aurora Dental Studio" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Saved" }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "Saved" })[0]);
+
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").leads[0].searchIds).toHaveLength(2));
+    const persisted = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}");
+    expect(persisted.leads).toHaveLength(1);
+    expect(persisted.leads[0].searchIds).toHaveLength(2);
   });
 
   it("shows a load-more provider error while keeping loaded results", async () => {

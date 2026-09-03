@@ -10,6 +10,7 @@ export type ProfileSettings = {
 export type AppState = {
   settings: ProfileSettings;
   searches: SearchRecord[];
+  leads: Lead[];
   nicheHistory: string[];
 };
 
@@ -62,6 +63,19 @@ export type SearchRecord = SearchCriteria & {
   providerPage: number;
   hasNextPage: boolean;
   candidates: Candidate[];
+};
+
+export type Lead = {
+  id: string;
+  providerId: string;
+  candidate: Candidate;
+  searchIds: string[];
+  status: "New";
+  note: string;
+  followUpDate?: string;
+  outreachMessage: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type SearchSession = {

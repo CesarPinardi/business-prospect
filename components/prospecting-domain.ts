@@ -1,4 +1,4 @@
-import type { AppState, Candidate, CityOption, ProfileSettings, SearchCriteria, SearchFilter, SearchSort } from "./prospecting-workspace-types";
+import type { AppState, Candidate, CityOption, Lead, ProfileSettings, SearchCriteria, SearchFilter, SearchSort } from "./prospecting-workspace-types";
 
 export const CITIES: CityOption[] = [
   { id: "jundiai", displayName: "Jundiaí, Brazil", country: "Brazil", latitude: -23.1857, longitude: -46.8978, providerId: "demo:city:jundiai" },
@@ -20,7 +20,11 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
 export const DEFAULT_SEARCH_CRITERIA: SearchCriteria = { cityId: "", niche: "", radiusKm: 5, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" };
 
 export function createInitialState(): AppState {
-  return { settings: { ...DEFAULT_SETTINGS }, searches: [], nicheHistory: [] };
+  return { settings: { ...DEFAULT_SETTINGS }, searches: [], leads: [], nicheHistory: [] };
+}
+
+export function getLeadByProviderId(leads: Lead[], providerId: string): Lead | undefined {
+  return leads.find((lead) => lead.providerId === providerId);
 }
 
 export function getCity(cityId: string): CityOption | undefined { return CITIES.find((city) => city.id === cityId); }
