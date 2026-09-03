@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CITIES, candidateWithinRadius, filterCandidates, generateDemoCandidates, getCurrentPage, getDemoProviderPage, sortCandidates } from "../components/prospecting-domain";
+import { CITIES, candidateWithinRadius, composeOutreachMessage, filterCandidates, generateDemoCandidates, getCurrentPage, getDemoProviderPage, sortCandidates, usableInternationalPhone, whatsappUrl } from "../components/prospecting-domain";
 
 describe("Demo search provider", () => {
   it("returns stable varied candidates and pages", () => {
@@ -39,5 +39,16 @@ describe("Demo search provider", () => {
     const inside = candidates.filter((candidate) => candidateWithinRadius(candidate, CITIES[0], 10));
     expect(getCurrentPage(inside, { ...criteria, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" }, 1)).toHaveLength(10);
     expect(getCurrentPage(inside, { ...criteria, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" }, 3)).toHaveLength(inside.length - 20);
+  });
+
+  it("prepares safe outreach fallbacks and WhatsApp links", () => {
+    const candidate = generateDemoCandidates(CITIES[0], "dentist")[0];
+    const settings = { name: "Cesar", businessName: "North Star", offeredService: "Web design", baseMessage: "Hi {{name}}, I’m {{sender}} from {{business}} about {{service}}." };
+    expect(composeOutreachMessage(settings, candidate, "dentist")).toContain("Aurora Dental Studio");
+    expect(composeOutreachMessage({ ...settings, baseMessage: "" }, candidate, "dentist")).toContain("North Star");
+    expect(usableInternationalPhone(candidate.phone)).toBe("5511988881200");
+    expect(whatsappUrl(candidate.phone, "Hello there")).toContain("https://wa.me/5511988881200?text=Hello%20there");
+    expect(usableInternationalPhone("(11) 98888-1200")).toBeUndefined();
+    expect(whatsappUrl(undefined, "Hello")).toBeUndefined();
   });
 });
