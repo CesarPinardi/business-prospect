@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { CITIES, filterCandidates, getCurrentPage, validateSettings } from "./prospecting-domain";
+import { CITIES, DEFAULT_SEARCH_CRITERIA, filterCandidates, getCurrentPage, validateSettings } from "./prospecting-domain";
 import type { Candidate, CandidateSelectionSource, IconName, ProfileSettings, SearchCriteria, SearchFilter, SearchSession, SearchSort, ViewId } from "./prospecting-workspace-types";
 
 const filterOptions: { value: SearchFilter; label: string }[] = [
@@ -74,8 +74,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
 }
 
 export function SearchView({ session, nicheHistory, onSearch, onChangeCriteria, onChangePage, onLoadMore, onSelectCandidate }: { session: SearchSession | null; nicheHistory: string[]; onSearch: (criteria: SearchCriteria) => void; onChangeCriteria: (criteria: SearchCriteria) => Promise<boolean>; onChangePage: (page: number) => void; onLoadMore: () => Promise<void>; onSelectCandidate: (candidateId: string, source: CandidateSelectionSource) => void }) {
-  const emptyCriteria: SearchCriteria = { cityId: "", niche: "", radiusKm: 5, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" };
-  const [criteria, setCriteria] = useState<SearchCriteria>(session?.criteria ?? emptyCriteria);
+  const [criteria, setCriteria] = useState<SearchCriteria>(session?.criteria ?? DEFAULT_SEARCH_CRITERIA);
   const canSearch = Boolean(criteria.cityId && criteria.niche.trim() && Number.isInteger(criteria.radiusKm) && criteria.radiusKm >= 1 && criteria.radiusKm <= 10);
   const currentCriteria = session?.criteria ?? criteria;
   const currentPage = session ? getCurrentPage(session.candidates, currentCriteria, session.currentPage) : [];
@@ -120,12 +119,22 @@ export function SearchView({ session, nicheHistory, onSearch, onChangeCriteria, 
 }
 
 function CandidateCard({ candidate, selected, onSelect }: { candidate: Candidate; selected: boolean; onSelect: () => void }) {
-  return <article id={`candidate-${candidate.providerId}`} className={`candidate-card${selected ? " is-selected" : ""}`} tabIndex={0} role="button" aria-pressed={selected} onClick={onSelect} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && event.target === event.currentTarget) { event.preventDefault(); onSelect(); } }}><div className={`candidate-photo${candidate.photoUrl ? " has-photo" : ""}`} aria-label={candidate.photoUrl ? "Photo listed" : "No photo listed"}>{candidate.photoUrl ? "Photo" : "—"}</div><div className="candidate-copy"><div className="candidate-title-row"><div><h3>{candidate.name}</h3><p>{candidate.category} · {candidate.distanceKm.toFixed(1)} km</p></div></div><p className="candidate-address">{candidate.address}</p><div className="candidate-metadata">{candidate.website ? <a href={candidate.website} target="_blank" rel="noreferrer">Website listed ↗</a> : <span>No website listed</span>}<span>{candidate.phone ?? "No phone listed"}</span><span>{candidate.photoUrl ? "Photo listed" : "No photo listed"}</span></div><small className="source-attribution">{candidate.sourceAttribution}</small></div></article>;
+  return <article className={`candidate-card${selected ? " is-selected" : ""}`}><div id={`candidate-${candidate.providerId}`} className="candidate-card-main" tabIndex={0} role="button" aria-pressed={selected} onClick={onSelect} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(); } }}><div className={`candidate-photo${candidate.photoUrl ? " has-photo" : ""}`} aria-label={candidate.photoUrl ? "Photo listed" : "No photo listed"}>{candidate.photoUrl ? "Photo" : "—"}</div><div className="candidate-copy"><div className="candidate-title-row"><div><h3>{candidate.name}</h3><p>{candidate.category} · {candidate.distanceKm.toFixed(1)} km</p></div></div><p className="candidate-address">{candidate.address}</p><div className="candidate-metadata">{candidate.website ? <span>Website listed</span> : <span>No website listed</span>}<span>{candidate.phone ?? "No phone listed"}</span><span>{candidate.photoUrl ? "Photo listed" : "No photo listed"}</span></div><small className="source-attribution">{candidate.sourceAttribution}</small></div></div><div className="candidate-actions">{candidate.website && <a href={candidate.website} target="_blank" rel="noreferrer" aria-label={`Open website for ${candidate.name}`}>Website ↗</a>}<a href={candidate.providerUrl} target="_blank" rel="noreferrer" aria-label={`Open map for ${candidate.name}`}>Map ↗</a></div></article>;
+}
+
+function markerPosition(city: SearchSession["city"], radiusKm: number, candidate: Candidate) {
+  const safeRadius = Math.max(radiusKm, 1);
+  const latitudeKm = (candidate.latitude - city.latitude) * 111.32;
+  const longitudeKm = (candidate.longitude - city.longitude) * 111.32 * Math.cos((city.latitude * Math.PI) / 180);
+  return {
+    top: `${Math.min(92, Math.max(8, 50 - (latitudeKm / safeRadius) * 42))}%`,
+    left: `${Math.min(92, Math.max(8, 50 + (longitudeKm / safeRadius) * 42))}%`,
+  };
 }
 
 function DemoMap({ city, radiusKm, candidates, selectedCandidateId, onSelect }: { city: SearchSession["city"]; radiusKm: number; candidates: Candidate[]; selectedCandidateId?: string; onSelect: (candidateId: string) => void }) {
   const selectedCandidate = candidates.find((candidate) => candidate.providerId === selectedCandidateId);
-  return <section className="demo-map" data-testid="demo-map" data-radius-km={radiusKm} aria-label={`Demo map centered on ${city.displayName}, radius ${radiusKm} km`}><div className="map-grid" /><div className="map-radius-circle"><span>{radiusKm} km</span></div><div className="map-center" aria-hidden="true"><Icon name="map" /></div>{candidates.map((candidate, index) => <button id={`marker-${candidate.providerId}`} className={`demo-map-marker${selectedCandidateId === candidate.providerId ? " is-selected" : ""}`} data-testid="map-marker" key={candidate.providerId} type="button" aria-label={`Show ${candidate.name} on map`} onClick={() => onSelect(candidate.providerId)}><span>{index + 1}</span></button>)}{selectedCandidate && <div className="map-summary" role="status"><strong>{selectedCandidate.name}</strong><span>Markers show only this page.</span></div>}</section>;
+  return <section className="demo-map" data-testid="demo-map" data-radius-km={radiusKm} aria-label={`Demo map centered on ${city.displayName}, radius ${radiusKm} km`}><div className="map-grid" /><div className="map-radius-circle"><span>{radiusKm} km</span></div><div className="map-center" aria-hidden="true"><Icon name="map" /></div>{candidates.map((candidate, index) => <button id={`marker-${candidate.providerId}`} className={`demo-map-marker${selectedCandidateId === candidate.providerId ? " is-selected" : ""}`} data-testid="map-marker" key={candidate.providerId} type="button" style={markerPosition(city, radiusKm, candidate)} aria-label={`Show ${candidate.name} on map`} onClick={() => onSelect(candidate.providerId)}><span>{index + 1}</span></button>)}{selectedCandidate && <div className="map-summary" role="status"><strong>{selectedCandidate.name}</strong><span>Markers show only this page.</span></div>}</section>;
 }
 
 function FilterControl({ label, value, onChange }: { label: string; value: SearchFilter; onChange: (value: SearchFilter) => void }) {

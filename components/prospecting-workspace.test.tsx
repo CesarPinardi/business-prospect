@@ -1,7 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { ProspectingWorkspace } from "./prospecting-workspace";
+import { resetStorageForTests } from "./prospecting-storage";
+
+beforeEach(() => {
+  window.localStorage.clear();
+  resetStorageForTests();
+});
 
 describe("ProspectingWorkspace", () => {
   it("starts in Demo mode with the complete primary navigation", () => {
@@ -74,6 +80,10 @@ describe("ProspectingWorkspace", () => {
     expect(screen.getByText("10 loaded")).toBeInTheDocument();
     expect(screen.getAllByText("Demo provider · sample data")).toHaveLength(10);
     expect(screen.getAllByTestId("map-marker")).toHaveLength(10);
+    expect(screen.getByTestId("demo-map")).toHaveAttribute("data-radius-km", "10");
+    const markerStyles = screen.getAllByTestId("map-marker").map((marker) => `${marker.getAttribute("style")}`);
+    expect(new Set(markerStyles).size).toBeGreaterThan(1);
+    expect(screen.getByRole("link", { name: "Open map for Aurora Dental Studio" })).toHaveAttribute("href", "https://maps.google.com/?cid=demo:city:jundiai-1");
     fireEvent.click(screen.getAllByTestId("map-marker")[1]);
     expect(document.activeElement).toHaveAttribute("id", "candidate-demo:place:jundiai:02");
     fireEvent.click(screen.getByRole("heading", { name: "Aurora Dental Studio" }));
@@ -101,5 +111,21 @@ describe("ProspectingWorkspace", () => {
     expect(screen.getAllByTestId("map-marker").length).toBeLessThanOrEqual(10);
     fireEvent.click(screen.getByRole("button", { name: "Previous" }));
     await waitFor(() => expect(screen.getByText(/Page 1 of/)).toBeInTheDocument());
+  });
+
+  it("shows invalid, loading, and provider-error search states", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(screen.getByText("Select a city, enter a niche, and choose a radius from 1 to 10 km.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "jundiai" } });
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "dentist" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(screen.getByRole("heading", { name: "Loading Demo businesses…" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "[provider-error]" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "The Demo provider is unavailable" })).toBeInTheDocument();
   });
 });
