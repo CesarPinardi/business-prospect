@@ -12,7 +12,7 @@ import {
   SearchView,
   SettingsView,
 } from "./prospecting-workspace-views";
-import type { AppState, IconName, SearchCriteria, SearchRecord, SearchSession, ViewId } from "./prospecting-workspace-types";
+import type { AppState, CandidateSelectionSource, IconName, SearchCriteria, SearchRecord, SearchSession, ViewId } from "./prospecting-workspace-types";
 
 type NavigationItem = {
   id: ViewId;
@@ -107,6 +107,10 @@ export function ProspectingWorkspace() {
     }, 80);
   }, [commit]);
 
+  const handleSelectCandidate = useCallback((candidateId: string, source: CandidateSelectionSource) => {
+    if (session) setSession({ ...session, selectedCandidateId: candidateId, selectionSource: source });
+  }, [session]);
+
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Workspace sidebar">
@@ -167,7 +171,7 @@ export function ProspectingWorkspace() {
 
         <main className="page-content">
           {activeView === "dashboard" && <DashboardView onNavigate={setActiveView} />}
-          {activeView === "search" && <SearchView session={session} nicheHistory={state.nicheHistory} onSearch={handleSearch} />}
+          {activeView === "search" && <SearchView session={session} nicheHistory={state.nicheHistory} onSearch={handleSearch} onSelectCandidate={handleSelectCandidate} />}
           {activeView === "leads" && <LeadsView onNavigate={setActiveView} />}
           {activeView === "pipeline" && <PipelineView />}
           {activeView === "settings" && <SettingsView settings={state.settings} onSave={handleSaveSettings} persistenceError={persistenceError} />}

@@ -79,6 +79,15 @@ describe("ProspectingWorkspace", () => {
     expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
     expect(screen.getByText("10 loaded")).toBeInTheDocument();
     expect(screen.getAllByText("Demo provider · sample data")).toHaveLength(10);
+    expect(screen.getAllByTestId("map-marker")).toHaveLength(10);
+    expect(screen.getByTestId("demo-map")).toHaveAttribute("data-radius-km", "10");
+    const markerStyles = screen.getAllByTestId("map-marker").map((marker) => `${marker.getAttribute("style")}`);
+    expect(new Set(markerStyles).size).toBeGreaterThan(1);
+    expect(screen.getByRole("link", { name: "Open map for Aurora Dental Studio" })).toHaveAttribute("href", "https://maps.google.com/?cid=demo:city:jundiai-1");
+    fireEvent.click(screen.getAllByTestId("map-marker")[1]);
+    expect(document.activeElement).toHaveAttribute("id", "candidate-demo:place:jundiai:02");
+    fireEvent.click(screen.getByRole("heading", { name: "Aurora Dental Studio" }));
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("id", "marker-demo:place:jundiai:01"));
   });
 
   it("shows invalid, loading, and provider-error search states", async () => {

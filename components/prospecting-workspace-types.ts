@@ -15,6 +15,7 @@ export type AppState = {
 
 export type SearchFilter = "all" | "listed" | "not-listed";
 export type SearchSort = "relevance" | "distance" | "name";
+export type CandidateSelectionSource = "card" | "marker";
 
 export type CityOption = {
   id: string;
@@ -72,6 +73,7 @@ export type SearchSession = {
   hasNextPage: boolean;
   currentPage: number;
   selectedCandidateId?: string;
+  selectionSource?: CandidateSelectionSource;
   status: "idle" | "loading" | "success" | "error";
   error?: string;
 };

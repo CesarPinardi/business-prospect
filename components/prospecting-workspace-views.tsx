@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
 import { CITIES, DEFAULT_SEARCH_CRITERIA, validateSettings } from "./prospecting-domain";
-import type { Candidate, IconName, ProfileSettings, SearchCriteria, SearchSession, ViewId } from "./prospecting-workspace-types";
+import type { Candidate, CandidateSelectionSource, IconName, ProfileSettings, SearchCriteria, SearchSession, ViewId } from "./prospecting-workspace-types";
 
 export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
   return (
@@ -67,9 +67,17 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
   );
 }
 
-export function SearchView({ session, nicheHistory, onSearch }: { session: SearchSession | null; nicheHistory: string[]; onSearch: (criteria: SearchCriteria) => void }) {
+export function SearchView({ session, nicheHistory, onSearch, onSelectCandidate }: { session: SearchSession | null; nicheHistory: string[]; onSearch: (criteria: SearchCriteria) => void; onSelectCandidate: (candidateId: string, source: CandidateSelectionSource) => void }) {
   const [criteria, setCriteria] = useState<SearchCriteria>(session?.criteria ?? DEFAULT_SEARCH_CRITERIA);
   const canSearch = Boolean(criteria.cityId && criteria.niche.trim() && Number.isInteger(criteria.radiusKm) && criteria.radiusKm >= 1 && criteria.radiusKm <= 10);
+  const currentPage = session?.candidates ?? [];
+  const selectedCandidate = currentPage.find((candidate) => candidate.providerId === session?.selectedCandidateId) ?? currentPage[0];
+
+  useEffect(() => {
+    if (!session?.selectedCandidateId || !session.selectionSource) return;
+    const targetId = session.selectionSource === "marker" ? `candidate-${session.selectedCandidateId}` : `marker-${session.selectedCandidateId}`;
+    document.getElementById(targetId)?.focus();
+  }, [session?.selectedCandidateId, session?.selectionSource]);
 
   return (
     <section className="view" aria-labelledby="search-title">
@@ -91,14 +99,29 @@ export function SearchView({ session, nicheHistory, onSearch }: { session: Searc
           {!canSearch && <p className="disabled-note">Select a city, enter a niche, and choose a radius from 1 to 10 km.</p>}
           {session?.status === "error" && <p className="form-error" role="alert">{session.error}</p>}
         </form>
-        {!session ? <div className="search-empty panel"><EmptyState icon="search" title="No search results yet" description="Choose a city and niche to see matching businesses here." compact /></div> : session.status === "loading" ? <div className="search-empty panel" role="status"><div className="loading-state"><span className="loading-spinner" /><h2>Loading Demo businesses…</h2><p>Checking the selected radius and preparing sample results.</p></div></div> : session.status === "error" ? <div className="search-empty panel"><EmptyState icon="search" title="The Demo provider is unavailable" description="Your existing results were kept. Try the search again in a moment." compact /></div> : <section className="results-panel panel" aria-labelledby="results-title"><div className="results-header"><div><p className="eyebrow">{session.city.displayName} · {session.criteria.radiusKm} km radius</p><h2 id="results-title">Demo businesses</h2></div><span className="result-disclosure">{session.candidates.length} loaded</span></div><p className="disclosure-copy">Sample data only. This is not every business in the area.</p><div className="result-list" aria-label="Current search results">{session.candidates.length ? session.candidates.map((candidate) => <DemoCandidateCard candidate={candidate} key={candidate.providerId} />) : <p className="no-results">No businesses were found inside this radius.</p>}</div></section>}
+        {!session ? <div className="search-empty panel"><EmptyState icon="search" title="No search results yet" description="Choose a city and niche to see matching businesses here." compact /></div> : session.status === "loading" ? <div className="search-empty panel" role="status"><div className="loading-state"><span className="loading-spinner" /><h2>Loading Demo businesses…</h2><p>Checking the selected radius and preparing sample results.</p></div></div> : session.status === "error" ? <div className="search-empty panel"><EmptyState icon="search" title="The Demo provider is unavailable" description="Your existing results were kept. Try the search again in a moment." compact /></div> : <section className="results-panel panel" aria-labelledby="results-title"><div className="results-header"><div><p className="eyebrow">{session.city.displayName} · {session.criteria.radiusKm} km radius</p><h2 id="results-title">Demo businesses</h2></div><span className="result-disclosure">{session.candidates.length} loaded</span></div><p className="disclosure-copy">Sample data only. This is not every business in the area.</p><div className="results-map-list"><DemoMap city={session.city} radiusKm={session.criteria.radiusKm} candidates={currentPage} selectedCandidateId={selectedCandidate?.providerId} onSelect={(candidateId) => onSelectCandidate(candidateId, "marker")} /><div className="result-list" aria-label="Current search results">{currentPage.length ? currentPage.map((candidate) => <CandidateCard candidate={candidate} key={candidate.providerId} selected={candidate.providerId === selectedCandidate?.providerId} onSelect={() => onSelectCandidate(candidate.providerId, "card")} />) : <p className="no-results">No businesses were found inside this radius.</p>}</div></div></section>}
       </div>
     </section>
   );
 }
 
-function DemoCandidateCard({ candidate }: { candidate: Candidate }) {
-  return <article className="candidate-card"><div className={`candidate-photo${candidate.photoUrl ? " has-photo" : ""}`} aria-label={candidate.photoUrl ? "Photo listed" : "No photo listed"}>{candidate.photoUrl ? "Photo" : "—"}</div><div className="candidate-copy"><div className="candidate-title-row"><div><h3>{candidate.name}</h3><p>{candidate.category} · {candidate.distanceKm.toFixed(1)} km</p></div></div><p className="candidate-address">{candidate.address}</p><div className="candidate-metadata">{candidate.website ? <a href={candidate.website} target="_blank" rel="noreferrer">Website listed ↗</a> : <span>No website listed</span>}<span>{candidate.phone ?? "No phone listed"}</span><span>{candidate.photoUrl ? "Photo listed" : "No photo listed"}</span></div><small className="source-attribution">{candidate.sourceAttribution}</small></div></article>;
+function CandidateCard({ candidate, selected, onSelect }: { candidate: Candidate; selected: boolean; onSelect: () => void }) {
+  return <article className={`candidate-card${selected ? " is-selected" : ""}`}><div id={`candidate-${candidate.providerId}`} className="candidate-card-main" tabIndex={0} role="button" aria-pressed={selected} onClick={onSelect} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(); } }}><div className={`candidate-photo${candidate.photoUrl ? " has-photo" : ""}`} aria-label={candidate.photoUrl ? "Photo listed" : "No photo listed"}>{candidate.photoUrl ? "Photo" : "—"}</div><div className="candidate-copy"><div className="candidate-title-row"><div><h3>{candidate.name}</h3><p>{candidate.category} · {candidate.distanceKm.toFixed(1)} km</p></div></div><p className="candidate-address">{candidate.address}</p><div className="candidate-metadata">{candidate.website ? <span>Website listed</span> : <span>No website listed</span>}<span>{candidate.phone ?? "No phone listed"}</span><span>{candidate.photoUrl ? "Photo listed" : "No photo listed"}</span></div><small className="source-attribution">{candidate.sourceAttribution}</small></div></div><div className="candidate-actions">{candidate.website && <a href={candidate.website} target="_blank" rel="noreferrer" aria-label={`Open website for ${candidate.name}`}>Website ↗</a>}<a href={candidate.providerUrl} target="_blank" rel="noreferrer" aria-label={`Open map for ${candidate.name}`}>Map ↗</a></div></article>;
+}
+
+function markerPosition(city: SearchSession["city"], radiusKm: number, candidate: Candidate) {
+  const safeRadius = Math.max(radiusKm, 1);
+  const latitudeKm = (candidate.latitude - city.latitude) * 111.32;
+  const longitudeKm = (candidate.longitude - city.longitude) * 111.32 * Math.cos((city.latitude * Math.PI) / 180);
+  return {
+    top: `${Math.min(92, Math.max(8, 50 - (latitudeKm / safeRadius) * 42))}%`,
+    left: `${Math.min(92, Math.max(8, 50 + (longitudeKm / safeRadius) * 42))}%`,
+  };
+}
+
+function DemoMap({ city, radiusKm, candidates, selectedCandidateId, onSelect }: { city: SearchSession["city"]; radiusKm: number; candidates: Candidate[]; selectedCandidateId?: string; onSelect: (candidateId: string) => void }) {
+  const selectedCandidate = candidates.find((candidate) => candidate.providerId === selectedCandidateId);
+  return <section className="demo-map" data-testid="demo-map" data-radius-km={radiusKm} aria-label={`Demo map centered on ${city.displayName}, radius ${radiusKm} km`}><div className="map-grid" /><div className="map-radius-circle"><span>{radiusKm} km</span></div><div className="map-center" aria-hidden="true"><Icon name="map" /></div>{candidates.map((candidate, index) => <button id={`marker-${candidate.providerId}`} className={`demo-map-marker${selectedCandidateId === candidate.providerId ? " is-selected" : ""}`} data-testid="map-marker" key={candidate.providerId} type="button" style={markerPosition(city, radiusKm, candidate)} aria-label={`Show ${candidate.name} on map`} onClick={() => onSelect(candidate.providerId)}><span>{index + 1}</span></button>)}{selectedCandidate && <div className="map-summary" role="status"><strong>{selectedCandidate.name}</strong><span>Markers show only this page.</span></div>}</section>;
 }
 
 export function LeadsView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
