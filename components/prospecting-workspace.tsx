@@ -259,7 +259,7 @@ export function ProspectingWorkspace() {
         <main className="page-content">
           {activeView === "dashboard" && <DashboardView state={state} onNavigate={setActiveView} onOpenLead={(leadId) => { setSelectedLeadId(leadId); setActiveView("leads"); }} />}
           {activeView === "search" && <SearchView session={session} nicheHistory={state.nicheHistory} savedProviderIds={new Set(state.leads.map((lead) => lead.providerId))} onSearch={handleSearch} onChangeCriteria={handleCriteriaChange} onChangePage={handlePageChange} onLoadMore={handleLoadMore} onSelectCandidate={handleSelectCandidate} onSaveCandidate={handleSaveCandidate} />}
-          {activeView === "leads" && <LeadsView leads={state.leads} activities={state.activities} selectedLeadId={selectedLeadId} onNavigate={setActiveView} onSelectLead={setSelectedLeadId} onUpdateStatus={handleUpdateStatus} onUpdateFollowUp={handleUpdateFollowUp} onUpdateNote={handleUpdateNote} onUpdateMessage={handleUpdateMessage} />}
+          {activeView === "leads" && <LeadsView leads={state.leads} activities={state.activities} selectedLeadId={selectedLeadId} onNavigate={setActiveView} onSelectLead={setSelectedLeadId} onUpdateStatus={handleUpdateStatus} onUpdateFollowUp={handleUpdateFollowUp} onUpdateNote={handleUpdateNote} onUpdateMessage={handleUpdateMessage} error={pipelineError} />}
           {activeView === "pipeline" && <PipelineView leads={state.leads} onSelectLead={(leadId) => { setSelectedLeadId(leadId); setActiveView("leads"); }} onUpdateStatus={handleUpdateStatus} error={pipelineError} />}
           {activeView === "settings" && <SettingsView settings={state.settings} onSave={handleSaveSettings} persistenceError={persistenceError} />}
         </main>
