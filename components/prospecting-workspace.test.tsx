@@ -127,6 +127,14 @@ describe("ProspectingWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Leads" }));
     expect(screen.getByRole("heading", { name: "Aurora Dental Studio" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open lead" }));
+    expect(screen.getByRole("heading", { name: "Outreach message" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Outreach message" }), { target: { value: "Hello Aurora" } });
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").leads[0].outreachMessage).toBe("Hello Aurora"));
+    expect(screen.getByRole("link", { name: "Open WhatsApp" })).toHaveAttribute("href", expect.stringContaining("Hello%20Aurora"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy message" }));
+    expect(await screen.findByText(/Copy unavailable/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Back to leads/ }));
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
     expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();

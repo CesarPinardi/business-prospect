@@ -27,6 +27,26 @@ export function getLeadByProviderId(leads: Lead[], providerId: string): Lead | u
   return leads.find((lead) => lead.providerId === providerId);
 }
 
+export function composeOutreachMessage(settings: ProfileSettings, candidate: Candidate, niche: string): string {
+  const sender = settings.name.trim() || "your local service partner";
+  const business = settings.businessName.trim() || "a local business";
+  const service = settings.offeredService.trim() || niche.trim() || "a service that helps local businesses grow";
+  const base = settings.baseMessage.trim();
+  if (base) return base.replaceAll("{{name}}", candidate.name).replaceAll("{{business}}", business).replaceAll("{{service}}", service).replaceAll("{{sender}}", sender);
+  return `Hi ${candidate.name}, I’m ${sender} from ${business}. I help ${niche.trim() || "local businesses"} with ${service}. Would you be open to a quick conversation about how I could help?`;
+}
+
+export function usableInternationalPhone(phone: string | undefined): string | undefined {
+  if (!phone || !phone.trim().startsWith("+")) return undefined;
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 8 && digits.length <= 15 ? digits : undefined;
+}
+
+export function whatsappUrl(phone: string | undefined, message: string): string | undefined {
+  const digits = usableInternationalPhone(phone);
+  return digits ? `https://wa.me/${digits}?text=${encodeURIComponent(message)}` : undefined;
+}
+
 export function getCity(cityId: string): CityOption | undefined { return CITIES.find((city) => city.id === cityId); }
 
 export function haversineDistanceKm(latitudeA: number, longitudeA: number, latitudeB: number, longitudeB: number): number {
