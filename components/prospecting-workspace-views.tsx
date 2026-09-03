@@ -1,15 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { validateSettings } from "./prospecting-domain";
-import type { IconName, ProfileSettings, ViewId } from "./prospecting-workspace-types";
+import { CITIES, DEFAULT_SEARCH_CRITERIA, filterCandidates, formatDate, getCurrentPage, isSearchThisWeek, relativeFollowUpGroup, validateSettings, whatsappUrl } from "./prospecting-domain";
+import type { ActivityEntry, AppState, Candidate, CandidateSelectionSource, IconName, Lead, LeadStatus, ProfileSettings, SearchCriteria, SearchFilter, SearchRecord, SearchSession, SearchSort, ViewId } from "./prospecting-workspace-types";
+import { LEAD_STATUSES } from "./prospecting-workspace-types";
 
-export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
+const filterOptions: { value: SearchFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "listed", label: "Listed" },
+  { value: "not-listed", label: "Not listed" },
+];
+
+export function DashboardView({ state, onNavigate, onOpenLead }: { state: AppState; onNavigate: (view: ViewId) => void; onOpenLead: (leadId: string) => void }) {
+  const followUpGroups = ["Overdue", "Today", "Upcoming"].map((group) => ({ group, leads: state.leads.filter((lead) => relativeFollowUpGroup(lead.followUpDate) === group) }));
+  const activeFollowUps = state.leads.filter((lead) => lead.followUpDate).length;
+  const searchesThisWeek = state.searches.filter((search) => isSearchThisWeek(search.executedAt)).length;
+  const recentActivities = [...state.activities].reverse().slice(0, 5);
   return (
     <section className="view" aria-labelledby="dashboard-title">
       <div className="hero-grid">
         <div className="page-intro">
-          <p className="eyebrow">Wednesday, September 2</p>
+        <p className="eyebrow">Local workspace</p>
           <h1 id="dashboard-title">Good morning, prospector.</h1>
           <p className="intro-copy">Find the right local businesses, start useful conversations, and keep every follow-up in view.</p>
           <button className="button button-primary" type="button" onClick={() => onNavigate("search")}>
@@ -27,9 +38,9 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
       </div>
 
       <div className="stats-grid" aria-label="Workspace overview">
-        <StatCard label="Saved leads" value="0" detail="Ready for your first find" icon="leads" tone="mint" />
-        <StatCard label="Active follow-ups" value="0" detail="Nothing due today" icon="activity" tone="peach" />
-        <StatCard label="Searches this week" value="0" detail="Demo search is available" icon="search" tone="lavender" />
+        <StatCard label="Saved leads" value={String(state.leads.length)} detail={state.leads.length ? "Ready for a next step" : "Ready for your first find"} icon="leads" tone="mint" />
+        <StatCard label="Active follow-ups" value={String(activeFollowUps)} detail={activeFollowUps ? "Dates are on your radar" : "Nothing scheduled"} icon="activity" tone="peach" />
+        <StatCard label="Searches this week" value={String(searchesThisWeek)} detail={searchesThisWeek ? "Recent discovery work" : "Demo search is available"} icon="search" tone="lavender" />
       </div>
 
       <div className="dashboard-grid">
@@ -41,14 +52,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
             </div>
             <button className="text-button" type="button" onClick={() => onNavigate("pipeline")}>View pipeline <Icon name="arrow" /></button>
           </div>
-          <EmptyState
-            icon="activity"
-            title="Your workspace is clear"
-            description="Search for a business to start building your prospect list."
-            actionLabel="Explore Search"
-            onAction={() => onNavigate("search")}
-            compact
-          />
+          {recentActivities.length ? <ol className="dashboard-activity-list">{recentActivities.map((activity) => <li key={activity.id}><span className="activity-dot" /><div><strong>{activity.kind === "status" ? `${activity.previousValue} → ${activity.newValue}` : `Follow-up ${activity.newValue ? `set for ${formatDate(activity.newValue)}` : "cleared"}`}</strong><time dateTime={activity.createdAt}>{new Date(activity.createdAt).toLocaleString()}</time></div></li>)}</ol> : <EmptyState icon="activity" title="Your workspace is clear" description="Search for a business to start building your prospect list." actionLabel="Explore Search" onAction={() => onNavigate("search")} compact />}
         </section>
 
         <section className="panel mode-panel" aria-labelledby="mode-title">
@@ -63,77 +67,98 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
           <p className="mode-footnote"><Icon name="activity" /> Local-first by design</p>
         </section>
       </div>
+      <section className="panel follow-up-panel" aria-labelledby="follow-up-title"><div className="panel-heading"><div><p className="eyebrow">Follow-up radar</p><h2 id="follow-up-title">Keep the next step visible</h2></div><button className="text-button" type="button" onClick={() => onNavigate("pipeline")}>Open pipeline <Icon name="arrow" /></button></div><div className="follow-up-groups">{followUpGroups.map(({ group, leads }) => <section key={group} aria-label={`${group} follow-ups`}><div className="follow-up-group-heading"><h3>{group}</h3><span>{leads.length}</span></div>{leads.length ? <div className="follow-up-leads">{leads.map((lead) => <button key={lead.id} className="follow-up-lead" type="button" onClick={() => onOpenLead(lead.id)}><strong>{lead.candidate.name}</strong><span>{lead.followUpDate ? formatDate(lead.followUpDate) : "No date"}</span></button>)}</div> : <p className="muted-copy">No leads here.</p>}</section>)}</div></section>
     </section>
   );
 }
 
-export function SearchView() {
+export function SearchView({ session, history, nicheHistory, savedProviderIds, onSearch, onChangeCriteria, onChangePage, onLoadMore, onReopen, onRename, onDelete, onSelectCandidate, onSaveCandidate }: { session: SearchSession | null; history: SearchRecord[]; nicheHistory: string[]; savedProviderIds: Set<string>; onSearch: (criteria: SearchCriteria) => void; onChangeCriteria: (criteria: SearchCriteria) => Promise<boolean>; onChangePage: (page: number) => void; onLoadMore: () => Promise<void>; onReopen: (search: SearchRecord) => void; onRename: (searchId: string, name: string) => Promise<boolean>; onDelete: (searchId: string) => Promise<void>; onSelectCandidate: (candidateId: string, source: CandidateSelectionSource) => void; onSaveCandidate: (candidate: Candidate) => Promise<"saved" | "already-saved" | "error"> }) {
+  const [criteria, setCriteria] = useState<SearchCriteria>(session?.criteria ?? DEFAULT_SEARCH_CRITERIA);
+  const [editingSearchId, setEditingSearchId] = useState<string>();
+  const [editingName, setEditingName] = useState("");
+  const [renameError, setRenameError] = useState("");
+  const canSearch = Boolean(criteria.cityId && criteria.niche.trim() && Number.isInteger(criteria.radiusKm) && criteria.radiusKm >= 1 && criteria.radiusKm <= 10);
+  const currentCriteria = session?.criteria ?? criteria;
+  const currentPage = session ? getCurrentPage(session.candidates, currentCriteria, session.currentPage) : [];
+  const totalFiltered = session ? filterCandidates(session.candidates, currentCriteria).length : 0;
+  const selectedCandidate = currentPage.find((candidate) => candidate.providerId === session?.selectedCandidateId) ?? currentPage[0];
+
+  async function updateCriteria(partial: Partial<SearchCriteria>) {
+    const next = { ...currentCriteria, ...partial };
+    if (await onChangeCriteria(next)) setCriteria(next);
+  }
+
+  useEffect(() => {
+    if (!session?.selectedCandidateId || !session.selectionSource) return;
+    const targetId = session.selectionSource === "marker" ? `candidate-${session.selectedCandidateId}` : `marker-${session.selectedCandidateId}`;
+    document.getElementById(targetId)?.focus();
+  }, [session?.selectedCandidateId, session?.selectionSource]);
+
   return (
     <section className="view" aria-labelledby="search-title">
-      <ViewIntro
-        eyebrow="Prospecting workspace"
-        title="Find your next conversation."
-        titleId="search-title"
-        description="Set a location and niche to discover local businesses worth reaching out to."
-      />
-
+      <ViewIntro eyebrow="Prospecting workspace" title="Find your next conversation." titleId="search-title" description="Set a location and niche to discover local businesses worth reaching out to." />
       <div className="search-shell">
-        <div className="search-form-panel panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Search setup</p>
-              <h2>Define your area</h2>
-            </div>
-            <div className="step-badge">01 <span>of</span> 01</div>
-          </div>
+        <form className="search-form-panel panel" onSubmit={(event) => { event.preventDefault(); if (canSearch) onSearch(criteria); }}>
+          <div className="panel-heading"><div><p className="eyebrow">Search setup</p><h2>Define your area</h2></div><div className="step-badge">01 <span>of</span> 01</div></div>
           <div className="form-stack">
             <label className="field-label" htmlFor="search-city">City</label>
-            <select className="field-control" id="search-city" defaultValue="">
-              <option value="">Select a city</option>
-              <option value="jundiai">Jundiaí, Brazil</option>
-              <option value="sao-paulo">São Paulo, Brazil</option>
-              <option value="lisbon">Lisbon, Portugal</option>
-            </select>
-
+            <select className="field-control" id="search-city" value={criteria.cityId} onChange={(event) => setCriteria((current) => ({ ...current, cityId: event.target.value }))}><option value="">Select a city</option>{CITIES.map((city) => <option key={city.id} value={city.id}>{city.displayName}</option>)}</select>
             <label className="field-label" htmlFor="search-niche">Business niche</label>
-            <input className="field-control" id="search-niche" type="text" placeholder="e.g. dental clinics, coffee shops" />
-
+            <input className="field-control" id="search-niche" list="recent-niches" value={criteria.niche} onChange={(event) => setCriteria((current) => ({ ...current, niche: event.target.value }))} placeholder="e.g. dental clinics, coffee shops" />
+            <datalist id="recent-niches">{nicheHistory.map((niche) => <option key={niche} value={niche} />)}</datalist>
             <label className="field-label" htmlFor="search-radius">Radius</label>
-            <select className="field-control" id="search-radius" defaultValue="5">
-              <option value="1">1 km</option>
-              <option value="3">3 km</option>
-              <option value="5">5 km</option>
-              <option value="10">10 km</option>
-            </select>
+            <select className="field-control" id="search-radius" value={criteria.radiusKm} onChange={(event) => setCriteria((current) => ({ ...current, radiusKm: Number(event.target.value) }))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((radius) => <option key={radius} value={radius}>{radius} km</option>)}</select>
           </div>
-          <div className="form-note"><Icon name="spark" /> Demo results will use sample businesses and stay on this device.</div>
-          <button className="button button-primary button-wide" type="button" disabled>
-            Search businesses <Icon name="arrow" />
-          </button>
-          <p className="disabled-note">Search setup is ready for your first Demo search.</p>
-        </div>
-
-        <div className="search-empty panel">
-          <div className="empty-map" aria-hidden="true">
-            <div className="map-grid" />
-            <div className="map-circle" />
-            <div className="map-marker marker-left"><Icon name="map" /></div>
-            <div className="map-marker marker-right"><Icon name="map" /></div>
-            <div className="map-marker marker-center"><Icon name="map" /></div>
-          </div>
-          <EmptyState
-            icon="search"
-            title="No search results yet"
-            description="Choose a city and niche to see matching businesses here."
-            compact
-          />
-        </div>
+          <div className="form-note"><Icon name="spark" /> Demo businesses are sample data; counts do not represent every business in the area.</div>
+          <button className="button button-primary button-wide" type="submit" disabled={!canSearch || session?.status === "loading"}>{session?.status === "loading" ? "Searching…" : "Search businesses"} <Icon name="arrow" /></button>
+          {!canSearch && <p className="disabled-note">Select a city, enter a niche, and choose a radius from 1 to 10 km.</p>}
+          {session?.status === "error" && <p className="form-error" role="alert">{session.error}</p>}
+        </form>
+        {session?.status === "success" && session.error && <p className="form-error" role="alert">{session.error}</p>}
+        {!session ? <div className="search-empty panel"><EmptyState icon="search" title="No search results yet" description="Choose a city and niche to see matching businesses here." compact /></div> : session.status === "loading" ? <div className="search-empty panel" role="status"><div className="loading-state"><span className="loading-spinner" /><h2>Loading Demo businesses…</h2><p>Checking the selected radius and preparing sample results.</p></div></div> : session.status === "error" ? <div className="search-empty panel"><EmptyState icon="search" title="The Demo provider is unavailable" description="Your existing results were kept. Try the search again in a moment." compact /></div> : <section className="results-panel panel" aria-labelledby="results-title"><div className="results-header"><div><p className="eyebrow">{session.city.displayName} · {currentCriteria.radiusKm} km radius</p><h2 id="results-title">Demo businesses</h2></div><span className="result-disclosure">{session.candidates.length} loaded</span></div><p className="disclosure-copy">Sample data only. Showing {totalFiltered} matching loaded result{totalFiltered === 1 ? "" : "s"}; this is not every business in the area.</p><div className="filter-grid" aria-label="Search result filters"><FilterControl label="Website" value={currentCriteria.websiteFilter} onChange={(value) => updateCriteria({ websiteFilter: value })} /><FilterControl label="Photo" value={currentCriteria.photoFilter} onChange={(value) => updateCriteria({ photoFilter: value })} /><FilterControl label="Phone" value={currentCriteria.phoneFilter} onChange={(value) => updateCriteria({ phoneFilter: value })} /><label className="filter-control"><span>Sort</span><select value={currentCriteria.sort} onChange={(event) => updateCriteria({ sort: event.target.value as SearchSort })}><option value="relevance">Provider relevance</option><option value="distance">Distance</option><option value="name">Business name</option></select></label></div><div className="results-map-list"><DemoMap city={session.city} radiusKm={currentCriteria.radiusKm} candidates={currentPage} selectedCandidateId={selectedCandidate?.providerId} onSelect={(candidateId) => onSelectCandidate(candidateId, "marker")} /><div className="result-list" aria-label="Current search results">{currentPage.length ? currentPage.map((candidate) => <CandidateCard candidate={candidate} key={candidate.providerId} selected={candidate.providerId === selectedCandidate?.providerId} saved={savedProviderIds.has(candidate.providerId)} onSelect={() => onSelectCandidate(candidate.providerId, "card")} onSave={() => onSaveCandidate(candidate)} />) : <p className="no-results">No loaded businesses match these filters.</p>}</div></div><div className="results-footer"><span>Page {Math.min(session.currentPage, Math.max(1, Math.ceil(totalFiltered / 10)))} of {Math.max(1, Math.ceil(totalFiltered / 10))} · {currentPage.length} shown</span><div className="pagination-actions"><button className="button button-secondary" type="button" disabled={session.currentPage <= 1} onClick={() => onChangePage(session.currentPage - 1)}>Previous</button><button className="button button-secondary" type="button" disabled={session.currentPage >= Math.max(1, Math.ceil(totalFiltered / 10))} onClick={() => onChangePage(session.currentPage + 1)}>Next</button></div></div><div className="load-more-row"><button className="button button-primary" type="button" disabled={!session.hasNextPage} onClick={() => void onLoadMore()}>{session.hasNextPage ? "Load 10 more" : "No more Demo results"} <Icon name="arrow" /></button>{!session.hasNextPage && <span>All deterministic provider pages are loaded.</span>}</div></section>}
       </div>
+      <section className="panel search-history-panel" aria-labelledby="history-title"><div className="panel-heading"><div><p className="eyebrow">Local history</p><h2 id="history-title">Saved searches</h2></div><span className="result-disclosure">{history.length}</span></div>{history.length ? <div className="search-history-list">{history.map((search) => <SearchHistoryRow key={search.id} search={search} editing={editingSearchId === search.id} editingName={editingName} renameError={renameError} onEdit={() => { setEditingSearchId(search.id); setEditingName(search.name); setRenameError(""); }} onNameChange={setEditingName} onSaveName={async () => { const ok = await onRename(search.id, editingName); if (ok) { setEditingSearchId(undefined); setRenameError(""); } else setRenameError("Enter a search name up to 80 characters."); }} onCancel={() => setEditingSearchId(undefined)} onDelete={() => void onDelete(search.id)} onReopen={() => onReopen(search)} />)}</div> : <p className="empty-history">Search history will stay available here after your first search.</p>}</section>
     </section>
   );
 }
 
-export function LeadsView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
+function SearchHistoryRow({ search, editing, editingName, renameError, onEdit, onNameChange, onSaveName, onCancel, onDelete, onReopen }: { search: SearchRecord; editing: boolean; editingName: string; renameError: string; onEdit: () => void; onNameChange: (name: string) => void; onSaveName: () => void; onCancel: () => void; onDelete: () => void; onReopen: () => void }) {
+  return <div className="search-history-row"><div><strong>{search.name}</strong><span>{search.city.displayName} · “{search.niche}” · {search.radiusKm} km · {search.loadedCount} loaded</span><small>{formatDate(search.executedAt.slice(0, 10))} · {search.providerMode} mode</small></div><div className="history-actions">{editing ? <><input className="field-control compact-control" aria-label="Search name" value={editingName} onChange={(event) => onNameChange(event.target.value)} /><button className="text-button" type="button" onClick={onSaveName}>Save name</button><button className="text-button" type="button" onClick={onCancel}>Cancel</button></> : <><button className="text-button" type="button" onClick={onEdit}>Rename</button><button className="text-button danger-text" type="button" onClick={onDelete}>Delete</button></>}<button className="button button-secondary" type="button" onClick={onReopen}>Reopen</button>{renameError && editing && <p className="form-error" role="alert">{renameError}</p>}</div></div>;
+}
+
+function CandidateCard({ candidate, selected, saved, onSelect, onSave }: { candidate: Candidate; selected: boolean; saved: boolean; onSelect: () => void; onSave: () => Promise<"saved" | "already-saved" | "error"> }) {
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "already-saved" | "error">("idle");
+  async function save(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    setSaveState("saving");
+    setSaveState(await onSave());
+  }
+  return <article className={`candidate-card${selected ? " is-selected" : ""}`}><div id={`candidate-${candidate.providerId}`} className="candidate-card-main" tabIndex={0} role="button" aria-pressed={selected} onClick={onSelect} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(); } }}><div className={`candidate-photo${candidate.photoUrl ? " has-photo" : ""}`} aria-label={candidate.photoUrl ? "Photo listed" : "No photo listed"}>{candidate.photoUrl ? "Photo" : "—"}</div><div className="candidate-copy"><div className="candidate-title-row"><div><h3>{candidate.name}</h3><p>{candidate.category} · {candidate.distanceKm.toFixed(1)} km</p></div></div><p className="candidate-address">{candidate.address}</p><div className="candidate-metadata">{candidate.website ? <span>Website listed</span> : <span>No website listed</span>}<span>{candidate.phone ?? "No phone listed"}</span><span>{candidate.photoUrl ? "Photo listed" : "No photo listed"}</span></div><small className="source-attribution">{candidate.sourceAttribution}</small>{saveState === "error" && <span className="field-error" role="alert">Could not save this lead locally. Try again.</span>}{saveState === "saved" && <span className="save-state save-state-saved" role="status">Lead saved.</span>}</div></div><div className="candidate-actions">{candidate.website && <a href={candidate.website} target="_blank" rel="noreferrer" aria-label={`Open website for ${candidate.name}`}>Website ↗</a>}<a href={candidate.providerUrl} target="_blank" rel="noreferrer" aria-label={`Open map for ${candidate.name}`}>Map ↗</a><button className="save-lead-button" type="button" disabled={saveState === "saving"} onClick={save}>{saved || saveState === "already-saved" ? "Saved" : saveState === "saving" ? "Saving…" : "Save lead"}</button></div></article>;
+}
+
+function markerPosition(city: SearchSession["city"], radiusKm: number, candidate: Candidate) {
+  const safeRadius = Math.max(radiusKm, 1);
+  const latitudeKm = (candidate.latitude - city.latitude) * 111.32;
+  const longitudeKm = (candidate.longitude - city.longitude) * 111.32 * Math.cos((city.latitude * Math.PI) / 180);
+  return {
+    top: `${Math.min(92, Math.max(8, 50 - (latitudeKm / safeRadius) * 42))}%`,
+    left: `${Math.min(92, Math.max(8, 50 + (longitudeKm / safeRadius) * 42))}%`,
+  };
+}
+
+function DemoMap({ city, radiusKm, candidates, selectedCandidateId, onSelect }: { city: SearchSession["city"]; radiusKm: number; candidates: Candidate[]; selectedCandidateId?: string; onSelect: (candidateId: string) => void }) {
+  const selectedCandidate = candidates.find((candidate) => candidate.providerId === selectedCandidateId);
+  return <section className="demo-map" data-testid="demo-map" data-radius-km={radiusKm} aria-label={`Demo map centered on ${city.displayName}, radius ${radiusKm} km`}><div className="map-grid" /><div className="map-radius-circle"><span>{radiusKm} km</span></div><div className="map-center" aria-hidden="true"><Icon name="map" /></div>{candidates.map((candidate, index) => <button id={`marker-${candidate.providerId}`} className={`demo-map-marker${selectedCandidateId === candidate.providerId ? " is-selected" : ""}`} data-testid="map-marker" key={candidate.providerId} type="button" style={markerPosition(city, radiusKm, candidate)} aria-label={`Show ${candidate.name} on map`} onClick={() => onSelect(candidate.providerId)}><span>{index + 1}</span></button>)}{selectedCandidate && <div className="map-summary" role="status"><strong>{selectedCandidate.name}</strong><span>Markers show only this page.</span></div>}</section>;
+}
+
+function FilterControl({ label, value, onChange }: { label: string; value: SearchFilter; onChange: (value: SearchFilter) => void }) {
+  return <label className="filter-control"><span>{label}</span><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value as SearchFilter)}>{filterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+}
+
+export function LeadsView({ leads, activities, selectedLeadId, onNavigate, onSelectLead, onUpdateStatus, onUpdateFollowUp, onUpdateNote, onUpdateMessage, error }: { leads: Lead[]; activities: ActivityEntry[]; selectedLeadId?: string; onNavigate: (view: ViewId) => void; onSelectLead: (leadId?: string) => void; onUpdateStatus: (leadId: string, status: LeadStatus) => Promise<boolean>; onUpdateFollowUp: (leadId: string, date: string) => Promise<boolean>; onUpdateNote: (leadId: string, note: string) => Promise<boolean>; onUpdateMessage: (leadId: string, message: string) => Promise<boolean>; error?: string }) {
+  const selectedLead = leads.find((lead) => lead.id === selectedLeadId);
+  if (selectedLead) return <section className="view" aria-labelledby="leads-title"><ViewIntro eyebrow="Your prospects" title="Leads worth following." titleId="leads-title" description="Businesses you choose to save will live here, ready for a thoughtful next step." /><LeadDetail key={selectedLead.id} lead={selectedLead} activities={activities.filter((activity) => activity.leadId === selectedLead.id)} error={error} onBack={() => onSelectLead(undefined)} onUpdateStatus={onUpdateStatus} onUpdateFollowUp={onUpdateFollowUp} onUpdateNote={onUpdateNote} onUpdateMessage={onUpdateMessage} /></section>;
+  if (leads.length) return <section className="view" aria-labelledby="leads-title"><ViewIntro eyebrow="Your prospects" title="Leads worth following." titleId="leads-title" description="Businesses you choose to save will live here, ready for a thoughtful next step." /><section className="lead-list" aria-label="Saved leads">{leads.map((lead) => <LeadListCard key={lead.id} lead={lead} onOpen={() => onSelectLead(lead.id)} />)}</section></section>;
   return (
     <section className="view" aria-labelledby="leads-title">
       <ViewIntro
@@ -155,9 +180,43 @@ export function LeadsView({ onNavigate }: { onNavigate: (view: ViewId) => void }
   );
 }
 
-export function PipelineView() {
-  const pipelineStages = ["New", "Contacted", "Interested", "Follow-up", "Won", "Not interested"];
+function LeadDetail({ lead, activities, error, onBack, onUpdateStatus, onUpdateFollowUp, onUpdateNote, onUpdateMessage }: { lead: Lead; activities: ActivityEntry[]; error?: string; onBack: () => void; onUpdateStatus: (leadId: string, status: LeadStatus) => Promise<boolean>; onUpdateFollowUp: (leadId: string, date: string) => Promise<boolean>; onUpdateNote: (leadId: string, note: string) => Promise<boolean>; onUpdateMessage: (leadId: string, message: string) => Promise<boolean> }) {
+  const [messageDraft, setMessageDraft] = useState(lead.outreachMessage);
+  const [noteDraft, setNoteDraft] = useState(lead.note);
+  const [messageStatus, setMessageStatus] = useState<"saved" | "saving" | "error">("saved");
+  const [noteStatus, setNoteStatus] = useState<"saved" | "saving" | "error">("saved");
+  const [copyStatus, setCopyStatus] = useState("");
 
+  function saveMessage(message: string) {
+    setMessageStatus("saving");
+    void onUpdateMessage(lead.id, message).then((saved) => setMessageStatus(saved ? "saved" : "error")).catch(() => setMessageStatus("error"));
+  }
+
+  function saveNote(note: string) {
+    setNoteStatus("saving");
+    void onUpdateNote(lead.id, note).then((saved) => setNoteStatus(saved ? "saved" : "error")).catch(() => setNoteStatus("error"));
+  }
+
+  async function copyMessage() {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(messageDraft);
+      setCopyStatus("Message copied.");
+    } catch {
+      setCopyStatus("Copy unavailable. Select the message and copy it manually.");
+    }
+  }
+
+  const whatsApp = whatsappUrl(lead.candidate.phone, messageDraft);
+  return <section className="lead-detail" aria-labelledby="lead-detail-title"><button className="text-button back-button" type="button" onClick={onBack}>← Back to leads</button><div className="lead-detail-header"><div><p className="eyebrow">Saved lead · {lead.status}</p><h2 id="lead-detail-title">{lead.candidate.name}</h2><p>{lead.candidate.address} · {lead.candidate.category}</p></div><label className="detail-status-label" htmlFor="lead-detail-status">Status<select id="lead-detail-status" aria-label={`Change status for ${lead.candidate.name}`} value={lead.status} onChange={(event) => void onUpdateStatus(lead.id, event.target.value as LeadStatus)}>{LEAD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="lead-detail-grid"><section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">Ready to personalize</p><h3>Outreach message</h3></div><span className={`save-state save-state-${messageStatus}`}>{messageStatus === "saving" ? "Saving…" : messageStatus === "error" ? "Could not save" : "Auto-saved"}</span></div><textarea className="field-control outreach-input" aria-label="Outreach message" value={messageDraft} onChange={(event) => { const message = event.target.value; setMessageDraft(message); saveMessage(message); }} /><div className="detail-actions"><button className="button button-primary" type="button" onClick={copyMessage}>Copy message</button>{whatsApp ? <a className="button button-secondary" href={whatsApp} target="_blank" rel="noreferrer">Open WhatsApp</a> : <button className="button button-secondary" type="button" disabled>WhatsApp unavailable</button>}</div>{copyStatus && <p className="copy-feedback" role="status">{copyStatus}</p>}<p className="field-help">No messages are sent automatically or in bulk.</p></section><section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">Keep context</p><h3>Note</h3></div><span className={`save-state save-state-${noteStatus}`}>{noteStatus === "saving" ? "Saving…" : noteStatus === "error" ? "Could not save" : "Auto-saved"}</span></div><textarea className="field-control note-input" aria-label="Lead note" value={noteDraft} onChange={(event) => { const note = event.target.value; setNoteDraft(note); saveNote(note); }} placeholder="Write a useful note about this lead…" /><p className="field-help">One note, saved automatically on this device.</p><label className="field-label" htmlFor="follow-up-date">Next follow-up</label><input className="field-control" id="follow-up-date" type="date" value={lead.followUpDate ?? ""} onChange={(event) => void onUpdateFollowUp(lead.id, event.target.value)} /><p className="field-help">Choose, change, or clear a date here or in the pipeline.</p></section></div><section className="panel activity-history" aria-labelledby="lead-activity-title"><div className="panel-heading"><div><p className="eyebrow">User-owned timeline</p><h3 id="lead-activity-title">Activity history</h3></div><span>{activities.length}</span></div>{activities.length ? <ol>{[...activities].reverse().map((activity) => <li key={activity.id}><span className="activity-dot" /><div><strong>{activity.kind === "status" ? `${activity.previousValue} → ${activity.newValue}` : `Follow-up ${activity.newValue ? `set for ${formatDate(activity.newValue)}` : "cleared"}`}</strong><time dateTime={activity.createdAt}>{new Date(activity.createdAt).toLocaleString()}</time></div></li>)}</ol> : <p className="muted-copy">Status and follow-up changes will appear here.</p>}</section></section>;
+}
+
+function LeadListCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
+  return <article className="panel lead-card"><div><p className="eyebrow">{lead.status}</p><h2>{lead.candidate.name}</h2><p>{lead.candidate.category} · {lead.candidate.address}</p></div><div className="lead-card-actions"><span className="lead-source">Saved lead</span><button className="button button-secondary" type="button" onClick={onOpen}>Open lead</button></div></article>;
+}
+
+export function PipelineView({ leads, onSelectLead, onUpdateStatus, error }: { leads: Lead[]; onSelectLead: (leadId: string) => void; onUpdateStatus: (leadId: string, status: LeadStatus) => Promise<boolean>; error?: string }) {
+  const [draggedLeadId, setDraggedLeadId] = useState<string>();
   return (
     <section className="view" aria-labelledby="pipeline-title">
       <ViewIntro
@@ -167,21 +226,23 @@ export function PipelineView() {
         description="Keep every prospect moving from first hello to a clear outcome."
       />
       <div className="stage-strip" aria-label="Pipeline stages">
-        {pipelineStages.map((stage, index) => (
+        {LEAD_STATUSES.map((stage, index) => (
           <div className="stage-chip" key={stage}>
             <span className="stage-number">0{index + 1}</span>
             <span>{stage}</span>
+            <strong>{leads.filter((lead) => lead.status === stage).length}</strong>
           </div>
         ))}
       </div>
-      <section className="panel full-empty-panel pipeline-empty-panel">
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {leads.length ? <div className="pipeline-board" aria-label="Sales pipeline">{LEAD_STATUSES.map((status) => <section className="pipeline-column" key={status} aria-label={`${status} leads`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const leadId = event.dataTransfer.getData("text/plain") || draggedLeadId; if (leadId) void onUpdateStatus(leadId, status); setDraggedLeadId(undefined); }}><div className="pipeline-column-heading"><h2>{status}</h2><span>{leads.filter((lead) => lead.status === status).length}</span></div>{leads.filter((lead) => lead.status === status).map((lead) => <article className="pipeline-card" draggable key={lead.id} onDragStart={(event) => { event.dataTransfer.setData("text/plain", lead.id); setDraggedLeadId(lead.id); }} onDragEnd={() => setDraggedLeadId(undefined)}><button className="lead-name-button" type="button" onClick={() => onSelectLead(lead.id)}>{lead.candidate.name}</button><p>{lead.candidate.category}</p><small>{lead.candidate.phone ?? "No phone listed"}</small><label className="status-selector-label" htmlFor={`pipeline-status-${lead.id}`}>Change status</label><select id={`pipeline-status-${lead.id}`} aria-label={`Change status for ${lead.candidate.name}`} value={lead.status} onChange={(event) => void onUpdateStatus(lead.id, event.target.value as LeadStatus)}>{LEAD_STATUSES.map((option) => <option key={option} value={option}>{option}</option>)}</select></article>)}</section>)}</div> : <section className="panel full-empty-panel pipeline-empty-panel">
         <EmptyState
           icon="pipeline"
           title="Your pipeline is clear"
           description="Saved leads will land in New. From there, you can keep the next action visible without losing the thread."
           compact
         />
-      </section>
+      </section>}
     </section>
   );
 }

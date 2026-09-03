@@ -27,7 +27,8 @@ function getStorage(): Storage | undefined {
 function normalizeState(value: unknown): AppState | undefined {
   if (!value || typeof value !== "object") return undefined;
   const parsed = value as Partial<AppState>;
-  return { settings: { ...createInitialState().settings, ...(parsed.settings ?? {}) } };
+  const defaults = createInitialState();
+  return { ...defaults, ...parsed, settings: { ...defaults.settings, ...(parsed.settings ?? {}) }, searches: Array.isArray(parsed.searches) ? parsed.searches : [], leads: Array.isArray(parsed.leads) ? parsed.leads : [], activities: Array.isArray(parsed.activities) ? parsed.activities : [], nicheHistory: Array.isArray(parsed.nicheHistory) ? parsed.nicheHistory : [] };
 }
 
 function parseState(raw: string | null | undefined): AppState | undefined {

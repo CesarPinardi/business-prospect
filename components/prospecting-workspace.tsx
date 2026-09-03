@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { createInitialState } from "./prospecting-domain";
+import { candidateWithinRadius, composeOutreachMessage, createInitialState, createId, filterCandidates, getCity, getDemoProviderPage, getLeadByProviderId } from "./prospecting-domain";
 import { loadAppState, saveAppState } from "./prospecting-storage";
 import {
   DashboardView,
@@ -12,7 +12,8 @@ import {
   SearchView,
   SettingsView,
 } from "./prospecting-workspace-views";
-import type { AppState, IconName, ViewId } from "./prospecting-workspace-types";
+import type { ActivityEntry, AppState, Candidate, CandidateSelectionSource, IconName, LeadStatus, SearchCriteria, SearchRecord, SearchSession, ViewId } from "./prospecting-workspace-types";
+import { LEAD_STATUSES } from "./prospecting-workspace-types";
 
 type NavigationItem = {
   id: ViewId;
@@ -43,6 +44,9 @@ export function ProspectingWorkspace() {
   const persistedStateRef = useRef(state);
   const commitQueue = useRef(Promise.resolve());
   const [persistenceError, setPersistenceError] = useState<string>();
+  const [session, setSession] = useState<SearchSession | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string>();
+  const [pipelineError, setPipelineError] = useState<string>();
 
   useEffect(() => {
     let active = true;
@@ -80,6 +84,140 @@ export function ProspectingWorkspace() {
 
   const handleSaveSettings = useCallback((settings: AppState["settings"]): Promise<boolean> => commit({ ...stateRef.current, settings }, { validateSettings: true }), [commit]);
 
+  const handleSearch = useCallback((criteria: SearchCriteria) => {
+    const city = getCity(criteria.cityId);
+    if (!city || !criteria.niche.trim() || !Number.isInteger(criteria.radiusKm) || criteria.radiusKm < 1 || criteria.radiusKm > 10) return;
+    const loadingSession: SearchSession = { criteria, city, candidates: [], providerPage: 0, hasNextPage: false, currentPage: 1, status: "loading" };
+    setSession(loadingSession);
+    window.setTimeout(() => {
+      void (async () => {
+        try {
+          const providerPage = getDemoProviderPage(city, criteria.niche, 0);
+          const candidates = providerPage.filter((candidate) => candidateWithinRadius(candidate, city, criteria.radiusKm));
+          const search: SearchRecord = { ...criteria, id: createId("search"), name: `${criteria.niche.trim()} in ${city.displayName.split(",")[0]}`, city, providerMode: "Demo", executedAt: new Date().toISOString(), loadedCount: candidates.length, providerPage: 0, hasNextPage: providerPage.length === 10, candidates };
+          const currentState = stateRef.current;
+          const niche = criteria.niche.trim();
+          const nextHistory = [niche, ...currentState.nicheHistory.filter((item) => item.toLowerCase() !== niche.toLowerCase())].slice(0, 10);
+          if (!await commit({ ...currentState, searches: [search, ...currentState.searches], nicheHistory: nextHistory })) {
+            setSession({ ...loadingSession, status: "error", error: "Search ran, but its history could not be saved locally." });
+            return;
+          }
+          setSession({ searchId: search.id, criteria, city, candidates, providerPage: 0, hasNextPage: providerPage.length === 10, currentPage: 1, selectedCandidateId: candidates[0]?.providerId, status: "success" });
+        } catch {
+          setSession({ ...loadingSession, status: "error", error: "The Demo provider is unavailable. No existing results were discarded." });
+        }
+      })();
+    }, 80);
+  }, [commit]);
+
+  const handleSelectCandidate = useCallback((candidateId: string, source: CandidateSelectionSource) => {
+    if (session) setSession({ ...session, selectedCandidateId: candidateId, selectionSource: source });
+  }, [session]);
+
+  const handleSaveCandidate = useCallback(async (candidate: Candidate): Promise<"saved" | "already-saved" | "error"> => {
+    if (!session?.searchId) return "error";
+    const searchId = session.searchId;
+    const currentState = stateRef.current;
+    const existing = getLeadByProviderId(currentState.leads, candidate.providerId);
+    if (existing) {
+      if (existing.searchIds.includes(searchId)) return "already-saved";
+      const next = { ...currentState, leads: currentState.leads.map((lead) => lead.id === existing.id ? { ...lead, searchIds: [...lead.searchIds, searchId], updatedAt: new Date().toISOString() } : lead) };
+      return await commit(next) ? "already-saved" : "error";
+    }
+    const now = new Date().toISOString();
+    const lead = { id: createId("lead"), providerId: candidate.providerId, candidate, searchIds: [searchId], status: "New" as const, note: "", outreachMessage: composeOutreachMessage(currentState.settings, candidate, session.criteria.niche), createdAt: now, updatedAt: now };
+    return await commit({ ...currentState, leads: [...currentState.leads, lead] }) ? "saved" : "error";
+  }, [commit, session]);
+
+  const handleUpdateLead = useCallback(async (leadId: string, update: (lead: AppState["leads"][number]) => AppState["leads"][number], activity?: ActivityEntry): Promise<boolean> => {
+    const currentState = stateRef.current;
+    if (!currentState.leads.some((lead) => lead.id === leadId)) return false;
+    return commit({ ...currentState, leads: currentState.leads.map((lead) => lead.id === leadId ? update(lead) : lead), activities: activity ? [...currentState.activities, activity] : currentState.activities });
+  }, [commit]);
+
+  const handleUpdateNote = useCallback((leadId: string, note: string): Promise<boolean> => handleUpdateLead(leadId, (lead) => ({ ...lead, note, updatedAt: new Date().toISOString() })), [handleUpdateLead]);
+
+  const handleUpdateMessage = useCallback((leadId: string, outreachMessage: string): Promise<boolean> => handleUpdateLead(leadId, (lead) => ({ ...lead, outreachMessage, updatedAt: new Date().toISOString() })), [handleUpdateLead]);
+
+  const handleUpdateFollowUp = useCallback(async (leadId: string, date: string): Promise<boolean> => {
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+    const lead = stateRef.current.leads.find((item) => item.id === leadId);
+    if (!lead || (lead.followUpDate ?? "") === date) return true;
+    const now = new Date().toISOString();
+    setPipelineError(undefined);
+    const saved = await handleUpdateLead(leadId, (current) => ({ ...current, followUpDate: date || undefined, updatedAt: now }), { id: createId("activity"), leadId, kind: "follow-up", previousValue: lead.followUpDate, newValue: date || undefined, createdAt: now });
+    if (!saved) setPipelineError("Could not save this follow-up date. The current date was kept.");
+    return saved;
+  }, [handleUpdateLead]);
+
+  const updateSearchRecord = useCallback(async (searchId: string, update: (search: SearchRecord) => SearchRecord): Promise<boolean> => {
+    const currentState = stateRef.current;
+    const search = currentState.searches.find((item) => item.id === searchId);
+    if (!search) return false;
+    const next = { ...currentState, searches: currentState.searches.map((item) => item.id === searchId ? update(item) : item) };
+    return commit(next);
+  }, [commit]);
+
+  const handleReopen = useCallback((search: SearchRecord) => {
+    setSession({ searchId: search.id, criteria: search, city: search.city, candidates: search.candidates, providerPage: search.providerPage, hasNextPage: search.hasNextPage, currentPage: 1, selectedCandidateId: search.candidates[0]?.providerId, status: "success" });
+    setActiveView("search");
+  }, []);
+
+  const handleRename = useCallback(async (searchId: string, name: string): Promise<boolean> => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.length > 80) return false;
+    return updateSearchRecord(searchId, (search) => ({ ...search, name: trimmed }));
+  }, [updateSearchRecord]);
+
+  const handleDelete = useCallback(async (searchId: string) => {
+    const currentState = stateRef.current;
+    const saved = await commit({ ...currentState, searches: currentState.searches.filter((search) => search.id !== searchId) });
+    if (saved && session?.searchId === searchId) setSession(null);
+  }, [commit, session?.searchId]);
+
+  const handleUpdateStatus = useCallback(async (leadId: string, status: LeadStatus): Promise<boolean> => {
+    if (!LEAD_STATUSES.includes(status)) return false;
+    const lead = stateRef.current.leads.find((item) => item.id === leadId);
+    if (!lead || lead.status === status) return true;
+    const now = new Date().toISOString();
+    setPipelineError(undefined);
+    const saved = await handleUpdateLead(leadId, (current) => ({ ...current, status, updatedAt: now }), { id: createId("activity"), leadId, kind: "status", previousValue: lead.status, newValue: status, createdAt: now });
+    if (!saved) setPipelineError("Could not save this status change. The lead stayed in its previous stage.");
+    return saved;
+  }, [handleUpdateLead]);
+
+  const handleCriteriaChange = useCallback(async (criteria: SearchCriteria): Promise<boolean> => {
+    if (!session || session.status !== "success" || !session.searchId) return false;
+    const saved = await updateSearchRecord(session.searchId, (search) => ({ ...search, ...criteria }));
+    if (saved) setSession({ ...session, criteria, currentPage: 1, selectedCandidateId: undefined, selectionSource: undefined });
+    return saved;
+  }, [session, updateSearchRecord]);
+
+  const handlePageChange = useCallback((page: number) => {
+    if (!session || page < 1) return;
+    const filteredCount = filterCandidates(session.candidates, session.criteria).length;
+    if (page > Math.max(1, Math.ceil(filteredCount / 10))) return;
+    setSession({ ...session, currentPage: page, selectedCandidateId: undefined });
+  }, [session]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!session || session.status !== "success" || !session.hasNextPage || !session.searchId) return;
+    try {
+      const nextPageNumber = session.providerPage + 1;
+      const page = getDemoProviderPage(session.city, session.criteria.niche, nextPageNumber);
+      const added = page.filter((candidate) => candidateWithinRadius(candidate, session.city, session.criteria.radiusKm) && !session.candidates.some((current) => current.providerId === candidate.providerId));
+      const candidates = [...session.candidates, ...added];
+      const saved = await updateSearchRecord(session.searchId, (search) => ({ ...search, candidates, providerPage: nextPageNumber, loadedCount: candidates.length, hasNextPage: page.length === 10 }));
+      if (!saved) {
+        setSession({ ...session, error: "The next Demo page could not be saved locally. Already loaded results remain available." });
+        return;
+      }
+      setSession({ ...session, candidates, providerPage: nextPageNumber, hasNextPage: page.length === 10, currentPage: 1, selectedCandidateId: added[0]?.providerId, selectionSource: undefined, error: undefined });
+    } catch {
+      setSession({ ...session, error: "The next Demo page failed to load. Already loaded results remain available." });
+    }
+  }, [session, updateSearchRecord]);
+
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Workspace sidebar">
@@ -107,7 +245,7 @@ export function ProspectingWorkspace() {
             >
               <Icon name={item.icon} />
               <span>{item.label}</span>
-              {item.id === "leads" && <span className="nav-count" aria-hidden="true">0</span>}
+              {item.id === "leads" && <span className="nav-count" aria-hidden="true">{state.leads.length}</span>}
             </button>
           ))}
         </nav>
@@ -138,11 +276,13 @@ export function ProspectingWorkspace() {
           </div>
         </header>
 
+        {persistenceError && <div className="global-error" role="alert">{persistenceError}</div>}
+
         <main className="page-content">
-          {activeView === "dashboard" && <DashboardView onNavigate={setActiveView} />}
-          {activeView === "search" && <SearchView />}
-          {activeView === "leads" && <LeadsView onNavigate={setActiveView} />}
-          {activeView === "pipeline" && <PipelineView />}
+          {activeView === "dashboard" && <DashboardView state={state} onNavigate={setActiveView} onOpenLead={(leadId) => { setSelectedLeadId(leadId); setActiveView("leads"); }} />}
+          {activeView === "search" && <SearchView key={session?.searchId ?? "new-search"} session={session} history={state.searches} nicheHistory={state.nicheHistory} savedProviderIds={new Set(state.leads.map((lead) => lead.providerId))} onSearch={handleSearch} onChangeCriteria={handleCriteriaChange} onChangePage={handlePageChange} onLoadMore={handleLoadMore} onReopen={handleReopen} onRename={handleRename} onDelete={handleDelete} onSelectCandidate={handleSelectCandidate} onSaveCandidate={handleSaveCandidate} />}
+          {activeView === "leads" && <LeadsView leads={state.leads} activities={state.activities} selectedLeadId={selectedLeadId} onNavigate={setActiveView} onSelectLead={setSelectedLeadId} onUpdateStatus={handleUpdateStatus} onUpdateFollowUp={handleUpdateFollowUp} onUpdateNote={handleUpdateNote} onUpdateMessage={handleUpdateMessage} error={pipelineError} />}
+          {activeView === "pipeline" && <PipelineView leads={state.leads} onSelectLead={(leadId) => { setSelectedLeadId(leadId); setActiveView("leads"); }} onUpdateStatus={handleUpdateStatus} error={pipelineError} />}
           {activeView === "settings" && <SettingsView settings={state.settings} onSave={handleSaveSettings} persistenceError={persistenceError} />}
         </main>
       </div>
