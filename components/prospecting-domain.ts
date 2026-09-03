@@ -47,6 +47,33 @@ export function whatsappUrl(phone: string | undefined, message: string): string 
   return digits ? `https://wa.me/${digits}?text=${encodeURIComponent(message)}` : undefined;
 }
 
+export function todayLocalDate(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function formatDate(value: string | undefined): string {
+  if (!value) return "No follow-up date";
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(year, month - 1, day));
+}
+
+export function relativeFollowUpGroup(date: string | undefined, now = new Date()): "Overdue" | "Today" | "Upcoming" | undefined {
+  if (!date) return undefined;
+  const today = todayLocalDate(now);
+  if (date < today) return "Overdue";
+  if (date === today) return "Today";
+  return "Upcoming";
+}
+
+export function isSearchThisWeek(executedAt: string, now = new Date()): boolean {
+  const executionDate = new Date(executedAt);
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+  return executionDate >= start && executionDate <= now;
+}
+
 export function getCity(cityId: string): CityOption | undefined { return CITIES.find((city) => city.id === cityId); }
 
 export function haversineDistanceKm(latitudeA: number, longitudeA: number, latitudeB: number, longitudeB: number): number {

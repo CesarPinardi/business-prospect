@@ -99,9 +99,9 @@ export type SearchSession = {
 export type ActivityEntry = {
   id: string;
   leadId: string;
-  kind: "status";
-  previousValue: string;
-  newValue: string;
+  kind: "status" | "follow-up";
+  previousValue?: string;
+  newValue?: string;
   createdAt: string;
 };
 

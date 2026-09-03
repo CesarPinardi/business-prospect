@@ -134,6 +134,10 @@ describe("ProspectingWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leads" }));
     fireEvent.click(screen.getByRole("button", { name: "Open lead" }));
     expect(screen.getByRole("heading", { name: "Outreach message" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Next follow-up"), { target: { value: "2026-09-10" } });
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").leads[0].followUpDate).toBe("2026-09-10"));
+    fireEvent.change(screen.getByLabelText("Next follow-up"), { target: { value: "" } });
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").leads[0].followUpDate).toBeUndefined());
     fireEvent.change(screen.getByRole("textbox", { name: "Outreach message" }), { target: { value: "Hello Aurora" } });
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").leads[0].outreachMessage).toBe("Hello Aurora"));
     expect(screen.getByRole("link", { name: "Open WhatsApp" })).toHaveAttribute("href", expect.stringContaining("Hello%20Aurora"));
@@ -171,6 +175,15 @@ describe("ProspectingWorkspace", () => {
       expect(screen.getByRole("combobox", { name: "Change status for Aurora Dental Studio" })).toHaveValue("New");
     } finally {
       setItem.mockRestore();
+    }
+
+    const followUpSetItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage full"); });
+    try {
+      fireEvent.change(screen.getByLabelText("Next follow-up"), { target: { value: "2026-09-10" } });
+      await waitFor(() => expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes("Could not save this follow-up date"))).toBe(true));
+      expect(screen.getByLabelText("Next follow-up")).toHaveValue("");
+    } finally {
+      followUpSetItem.mockRestore();
     }
   });
 
