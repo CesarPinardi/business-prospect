@@ -176,6 +176,15 @@ describe("ProspectingWorkspace", () => {
     } finally {
       setItem.mockRestore();
     }
+
+    const followUpSetItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage full"); });
+    try {
+      fireEvent.change(screen.getByLabelText("Next follow-up"), { target: { value: "2026-09-10" } });
+      await waitFor(() => expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes("Could not save this follow-up date"))).toBe(true));
+      expect(screen.getByLabelText("Next follow-up")).toHaveValue("");
+    } finally {
+      followUpSetItem.mockRestore();
+    }
   });
 
   it("shows a load-more provider error while keeping loaded results", async () => {

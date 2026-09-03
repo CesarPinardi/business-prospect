@@ -144,7 +144,10 @@ export function ProspectingWorkspace() {
     const lead = stateRef.current.leads.find((item) => item.id === leadId);
     if (!lead || (lead.followUpDate ?? "") === date) return true;
     const now = new Date().toISOString();
-    return handleUpdateLead(leadId, (current) => ({ ...current, followUpDate: date || undefined, updatedAt: now }), { id: createId("activity"), leadId, kind: "follow-up", previousValue: lead.followUpDate, newValue: date || undefined, createdAt: now });
+    setPipelineError(undefined);
+    const saved = await handleUpdateLead(leadId, (current) => ({ ...current, followUpDate: date || undefined, updatedAt: now }), { id: createId("activity"), leadId, kind: "follow-up", previousValue: lead.followUpDate, newValue: date || undefined, createdAt: now });
+    if (!saved) setPipelineError("Could not save this follow-up date. The current date was kept.");
+    return saved;
   }, [handleUpdateLead]);
 
   const handleUpdateStatus = useCallback(async (leadId: string, status: LeadStatus): Promise<boolean> => {
