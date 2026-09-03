@@ -150,10 +150,20 @@ describe("ProspectingWorkspace", () => {
     expect(screen.getAllByRole("button", { name: "Saved" }).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole("button", { name: "Saved" })[0]);
 
+    expect(screen.getByRole("heading", { name: "Saved searches" })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Rename" })[0]);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search name" }), { target: { value: "Dentist discovery" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").searches[0].name).toBe("Dentist discovery"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Reopen" })[0]);
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[1]);
+
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").leads[0].searchIds).toHaveLength(2));
     const persisted = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}");
     expect(persisted.leads).toHaveLength(1);
     expect(persisted.leads[0].searchIds).toHaveLength(2);
+    expect(persisted.searches).toHaveLength(1);
   });
 
   it("shows status persistence errors in the lead detail", async () => {
@@ -171,7 +181,7 @@ describe("ProspectingWorkspace", () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage full"); });
     try {
       fireEvent.change(screen.getByRole("combobox", { name: "Change status for Aurora Dental Studio" }), { target: { value: "Contacted" } });
-      expect(await screen.findByRole("alert")).toHaveTextContent("Could not save this status change");
+       expect(await screen.findByText("Could not save this status change. The lead stayed in its previous stage.")).toBeInTheDocument();
       expect(screen.getByRole("combobox", { name: "Change status for Aurora Dental Studio" })).toHaveValue("New");
     } finally {
       setItem.mockRestore();

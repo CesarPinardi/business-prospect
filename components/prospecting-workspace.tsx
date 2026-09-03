@@ -150,6 +150,31 @@ export function ProspectingWorkspace() {
     return saved;
   }, [handleUpdateLead]);
 
+  const updateSearchRecord = useCallback(async (searchId: string, update: (search: SearchRecord) => SearchRecord): Promise<boolean> => {
+    const currentState = stateRef.current;
+    const search = currentState.searches.find((item) => item.id === searchId);
+    if (!search) return false;
+    const next = { ...currentState, searches: currentState.searches.map((item) => item.id === searchId ? update(item) : item) };
+    return commit(next);
+  }, [commit]);
+
+  const handleReopen = useCallback((search: SearchRecord) => {
+    setSession({ searchId: search.id, criteria: search, city: search.city, candidates: search.candidates, providerPage: search.providerPage, hasNextPage: search.hasNextPage, currentPage: 1, selectedCandidateId: search.candidates[0]?.providerId, status: "success" });
+    setActiveView("search");
+  }, []);
+
+  const handleRename = useCallback(async (searchId: string, name: string): Promise<boolean> => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.length > 80) return false;
+    return updateSearchRecord(searchId, (search) => ({ ...search, name: trimmed }));
+  }, [updateSearchRecord]);
+
+  const handleDelete = useCallback(async (searchId: string) => {
+    const currentState = stateRef.current;
+    const saved = await commit({ ...currentState, searches: currentState.searches.filter((search) => search.id !== searchId) });
+    if (saved && session?.searchId === searchId) setSession(null);
+  }, [commit, session?.searchId]);
+
   const handleUpdateStatus = useCallback(async (leadId: string, status: LeadStatus): Promise<boolean> => {
     if (!LEAD_STATUSES.includes(status)) return false;
     const lead = stateRef.current.leads.find((item) => item.id === leadId);
@@ -160,14 +185,6 @@ export function ProspectingWorkspace() {
     if (!saved) setPipelineError("Could not save this status change. The lead stayed in its previous stage.");
     return saved;
   }, [handleUpdateLead]);
-
-  const updateSearchRecord = useCallback(async (searchId: string, update: (search: SearchRecord) => SearchRecord): Promise<boolean> => {
-    const currentState = stateRef.current;
-    const search = currentState.searches.find((item) => item.id === searchId);
-    if (!search) return false;
-    const next = { ...currentState, searches: currentState.searches.map((item) => item.id === searchId ? update(item) : item) };
-    return commit(next);
-  }, [commit]);
 
   const handleCriteriaChange = useCallback(async (criteria: SearchCriteria): Promise<boolean> => {
     if (!session || session.status !== "success" || !session.searchId) return false;
@@ -259,9 +276,11 @@ export function ProspectingWorkspace() {
           </div>
         </header>
 
+        {persistenceError && <div className="global-error" role="alert">{persistenceError}</div>}
+
         <main className="page-content">
           {activeView === "dashboard" && <DashboardView state={state} onNavigate={setActiveView} onOpenLead={(leadId) => { setSelectedLeadId(leadId); setActiveView("leads"); }} />}
-          {activeView === "search" && <SearchView session={session} nicheHistory={state.nicheHistory} savedProviderIds={new Set(state.leads.map((lead) => lead.providerId))} onSearch={handleSearch} onChangeCriteria={handleCriteriaChange} onChangePage={handlePageChange} onLoadMore={handleLoadMore} onSelectCandidate={handleSelectCandidate} onSaveCandidate={handleSaveCandidate} />}
+          {activeView === "search" && <SearchView key={session?.searchId ?? "new-search"} session={session} history={state.searches} nicheHistory={state.nicheHistory} savedProviderIds={new Set(state.leads.map((lead) => lead.providerId))} onSearch={handleSearch} onChangeCriteria={handleCriteriaChange} onChangePage={handlePageChange} onLoadMore={handleLoadMore} onReopen={handleReopen} onRename={handleRename} onDelete={handleDelete} onSelectCandidate={handleSelectCandidate} onSaveCandidate={handleSaveCandidate} />}
           {activeView === "leads" && <LeadsView leads={state.leads} activities={state.activities} selectedLeadId={selectedLeadId} onNavigate={setActiveView} onSelectLead={setSelectedLeadId} onUpdateStatus={handleUpdateStatus} onUpdateFollowUp={handleUpdateFollowUp} onUpdateNote={handleUpdateNote} onUpdateMessage={handleUpdateMessage} error={pipelineError} />}
           {activeView === "pipeline" && <PipelineView leads={state.leads} onSelectLead={(leadId) => { setSelectedLeadId(leadId); setActiveView("leads"); }} onUpdateStatus={handleUpdateStatus} error={pipelineError} />}
           {activeView === "settings" && <SettingsView settings={state.settings} onSave={handleSaveSettings} persistenceError={persistenceError} />}
