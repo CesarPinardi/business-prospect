@@ -90,6 +90,44 @@ describe("ProspectingWorkspace", () => {
     await waitFor(() => expect(document.activeElement).toHaveAttribute("id", "marker-demo:place:jundiai:01"));
   });
 
+  it("filters, sorts, paginates, and loads the next Demo page", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "jundiai" } });
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "dentist" } });
+    fireEvent.change(screen.getByLabelText("Radius"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Website" }), { target: { value: "not-listed" } });
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Website" })).toHaveValue("not-listed"));
+    expect(screen.getAllByText("No website listed").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByRole("combobox", { name: "Website" }), { target: { value: "all" } });
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Website" })).toHaveValue("all"));
+    fireEvent.click(screen.getByRole("button", { name: "Load 10 more" }));
+    await waitFor(() => expect(screen.getByText("20 loaded")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(screen.getByText(/Page 2 of/)).toBeInTheDocument());
+    expect(screen.getAllByTestId("map-marker").length).toBeLessThanOrEqual(10);
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    await waitFor(() => expect(screen.getByText(/Page 1 of/)).toBeInTheDocument());
+  });
+
+  it("shows a load-more provider error while keeping loaded results", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "jundiai" } });
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "dentist [provider-error-more]" } });
+    fireEvent.change(screen.getByLabelText("Radius"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load 10 more" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The next Demo page failed to load");
+    expect(screen.getByText("10 loaded")).toBeInTheDocument();
+    expect(screen.getAllByTestId("map-marker")).toHaveLength(10);
+  });
+
   it("shows invalid, loading, and provider-error search states", async () => {
     render(<ProspectingWorkspace />);
     fireEvent.click(screen.getByRole("button", { name: "Search" }));

@@ -52,7 +52,7 @@ export function generateDemoCandidates(city: CityOption, niche: string): Candida
 
 export function getDemoProviderPage(city: CityOption, niche: string, page: number): Candidate[] {
   const normalizedNiche = niche.trim().toLowerCase();
-  if (normalizedNiche.includes("[provider-error]")) throw new Error("Demo provider unavailable");
+  if (normalizedNiche.includes("[provider-error]") || (normalizedNiche.includes("[provider-error-more]") && page > 0)) throw new Error("Demo provider unavailable");
   return generateDemoCandidates(city, niche).slice(page * 10, page * 10 + 10);
 }
 

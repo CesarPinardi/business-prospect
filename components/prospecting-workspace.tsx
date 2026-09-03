@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { candidateWithinRadius, createInitialState, createId, getCity, getDemoProviderPage } from "./prospecting-domain";
+import { candidateWithinRadius, createInitialState, createId, filterCandidates, getCity, getDemoProviderPage } from "./prospecting-domain";
 import { loadAppState, saveAppState } from "./prospecting-storage";
 import {
   DashboardView,
@@ -111,6 +111,46 @@ export function ProspectingWorkspace() {
     if (session) setSession({ ...session, selectedCandidateId: candidateId, selectionSource: source });
   }, [session]);
 
+  const updateSearchRecord = useCallback(async (searchId: string, update: (search: SearchRecord) => SearchRecord): Promise<boolean> => {
+    const currentState = stateRef.current;
+    const search = currentState.searches.find((item) => item.id === searchId);
+    if (!search) return false;
+    const next = { ...currentState, searches: currentState.searches.map((item) => item.id === searchId ? update(item) : item) };
+    return commit(next);
+  }, [commit]);
+
+  const handleCriteriaChange = useCallback(async (criteria: SearchCriteria): Promise<boolean> => {
+    if (!session || session.status !== "success" || !session.searchId) return false;
+    const saved = await updateSearchRecord(session.searchId, (search) => ({ ...search, ...criteria }));
+    if (saved) setSession({ ...session, criteria, currentPage: 1, selectedCandidateId: undefined, selectionSource: undefined });
+    return saved;
+  }, [session, updateSearchRecord]);
+
+  const handlePageChange = useCallback((page: number) => {
+    if (!session || page < 1) return;
+    const filteredCount = filterCandidates(session.candidates, session.criteria).length;
+    if (page > Math.max(1, Math.ceil(filteredCount / 10))) return;
+    setSession({ ...session, currentPage: page, selectedCandidateId: undefined });
+  }, [session]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!session || session.status !== "success" || !session.hasNextPage || !session.searchId) return;
+    try {
+      const nextPageNumber = session.providerPage + 1;
+      const page = getDemoProviderPage(session.city, session.criteria.niche, nextPageNumber);
+      const added = page.filter((candidate) => candidateWithinRadius(candidate, session.city, session.criteria.radiusKm) && !session.candidates.some((current) => current.providerId === candidate.providerId));
+      const candidates = [...session.candidates, ...added];
+      const saved = await updateSearchRecord(session.searchId, (search) => ({ ...search, candidates, providerPage: nextPageNumber, loadedCount: candidates.length, hasNextPage: page.length === 10 }));
+      if (!saved) {
+        setSession({ ...session, error: "The next Demo page could not be saved locally. Already loaded results remain available." });
+        return;
+      }
+      setSession({ ...session, candidates, providerPage: nextPageNumber, hasNextPage: page.length === 10, currentPage: 1, selectedCandidateId: added[0]?.providerId, selectionSource: undefined, error: undefined });
+    } catch {
+      setSession({ ...session, error: "The next Demo page failed to load. Already loaded results remain available." });
+    }
+  }, [session, updateSearchRecord]);
+
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Workspace sidebar">
@@ -171,7 +211,7 @@ export function ProspectingWorkspace() {
 
         <main className="page-content">
           {activeView === "dashboard" && <DashboardView onNavigate={setActiveView} />}
-          {activeView === "search" && <SearchView session={session} nicheHistory={state.nicheHistory} onSearch={handleSearch} onSelectCandidate={handleSelectCandidate} />}
+          {activeView === "search" && <SearchView session={session} nicheHistory={state.nicheHistory} onSearch={handleSearch} onChangeCriteria={handleCriteriaChange} onChangePage={handlePageChange} onLoadMore={handleLoadMore} onSelectCandidate={handleSelectCandidate} />}
           {activeView === "leads" && <LeadsView onNavigate={setActiveView} />}
           {activeView === "pipeline" && <PipelineView />}
           {activeView === "settings" && <SettingsView settings={state.settings} onSave={handleSaveSettings} persistenceError={persistenceError} />}
