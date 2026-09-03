@@ -62,4 +62,16 @@ describe("ProspectingWorkspace", () => {
     expect(await screen.findByText("Saved locally.")).toBeInTheDocument();
     await waitFor(() => expect(window.localStorage.getItem("prospect.local.workspace.v1")).toContain("North Star"));
   });
+
+  it("searches deterministic Demo businesses inside the selected radius", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "jundiai" } });
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "dentist" } });
+    fireEvent.change(screen.getByLabelText("Radius"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+    expect(screen.getByText("10 loaded")).toBeInTheDocument();
+    expect(screen.getAllByText("Demo provider · sample data")).toHaveLength(10);
+  });
 });

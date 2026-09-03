@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { validateSettings } from "./prospecting-domain";
-import type { IconName, ProfileSettings, ViewId } from "./prospecting-workspace-types";
+import { CITIES, validateSettings } from "./prospecting-domain";
+import type { Candidate, IconName, ProfileSettings, SearchCriteria, SearchSession, ViewId } from "./prospecting-workspace-types";
 
 export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
   return (
@@ -67,70 +67,39 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
   );
 }
 
-export function SearchView() {
+export function SearchView({ session, nicheHistory, onSearch }: { session: SearchSession | null; nicheHistory: string[]; onSearch: (criteria: SearchCriteria) => void }) {
+  const emptyCriteria: SearchCriteria = { cityId: "", niche: "", radiusKm: 5, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" };
+  const [criteria, setCriteria] = useState<SearchCriteria>(session?.criteria ?? emptyCriteria);
+  const canSearch = Boolean(criteria.cityId && criteria.niche.trim() && Number.isInteger(criteria.radiusKm) && criteria.radiusKm >= 1 && criteria.radiusKm <= 10);
+
   return (
     <section className="view" aria-labelledby="search-title">
-      <ViewIntro
-        eyebrow="Prospecting workspace"
-        title="Find your next conversation."
-        titleId="search-title"
-        description="Set a location and niche to discover local businesses worth reaching out to."
-      />
-
+      <ViewIntro eyebrow="Prospecting workspace" title="Find your next conversation." titleId="search-title" description="Set a location and niche to discover local businesses worth reaching out to." />
       <div className="search-shell">
-        <div className="search-form-panel panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Search setup</p>
-              <h2>Define your area</h2>
-            </div>
-            <div className="step-badge">01 <span>of</span> 01</div>
-          </div>
+        <form className="search-form-panel panel" onSubmit={(event) => { event.preventDefault(); if (canSearch) onSearch(criteria); }}>
+          <div className="panel-heading"><div><p className="eyebrow">Search setup</p><h2>Define your area</h2></div><div className="step-badge">01 <span>of</span> 01</div></div>
           <div className="form-stack">
             <label className="field-label" htmlFor="search-city">City</label>
-            <select className="field-control" id="search-city" defaultValue="">
-              <option value="">Select a city</option>
-              <option value="jundiai">Jundiaí, Brazil</option>
-              <option value="sao-paulo">São Paulo, Brazil</option>
-              <option value="lisbon">Lisbon, Portugal</option>
-            </select>
-
+            <select className="field-control" id="search-city" value={criteria.cityId} onChange={(event) => setCriteria((current) => ({ ...current, cityId: event.target.value }))}><option value="">Select a city</option>{CITIES.map((city) => <option key={city.id} value={city.id}>{city.displayName}</option>)}</select>
             <label className="field-label" htmlFor="search-niche">Business niche</label>
-            <input className="field-control" id="search-niche" type="text" placeholder="e.g. dental clinics, coffee shops" />
-
+            <input className="field-control" id="search-niche" list="recent-niches" value={criteria.niche} onChange={(event) => setCriteria((current) => ({ ...current, niche: event.target.value }))} placeholder="e.g. dental clinics, coffee shops" />
+            <datalist id="recent-niches">{nicheHistory.map((niche) => <option key={niche} value={niche} />)}</datalist>
             <label className="field-label" htmlFor="search-radius">Radius</label>
-            <select className="field-control" id="search-radius" defaultValue="5">
-              <option value="1">1 km</option>
-              <option value="3">3 km</option>
-              <option value="5">5 km</option>
-              <option value="10">10 km</option>
-            </select>
+            <select className="field-control" id="search-radius" value={criteria.radiusKm} onChange={(event) => setCriteria((current) => ({ ...current, radiusKm: Number(event.target.value) }))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((radius) => <option key={radius} value={radius}>{radius} km</option>)}</select>
           </div>
-          <div className="form-note"><Icon name="spark" /> Demo results will use sample businesses and stay on this device.</div>
-          <button className="button button-primary button-wide" type="button" disabled>
-            Search businesses <Icon name="arrow" />
-          </button>
-          <p className="disabled-note">Search setup is ready for your first Demo search.</p>
-        </div>
-
-        <div className="search-empty panel">
-          <div className="empty-map" aria-hidden="true">
-            <div className="map-grid" />
-            <div className="map-circle" />
-            <div className="map-marker marker-left"><Icon name="map" /></div>
-            <div className="map-marker marker-right"><Icon name="map" /></div>
-            <div className="map-marker marker-center"><Icon name="map" /></div>
-          </div>
-          <EmptyState
-            icon="search"
-            title="No search results yet"
-            description="Choose a city and niche to see matching businesses here."
-            compact
-          />
-        </div>
+          <div className="form-note"><Icon name="spark" /> Demo businesses are sample data; counts do not represent every business in the area.</div>
+          <button className="button button-primary button-wide" type="submit" disabled={!canSearch || session?.status === "loading"}>{session?.status === "loading" ? "Searching…" : "Search businesses"} <Icon name="arrow" /></button>
+          {!canSearch && <p className="disabled-note">Select a city, enter a niche, and choose a radius from 1 to 10 km.</p>}
+          {session?.status === "error" && <p className="form-error" role="alert">{session.error}</p>}
+        </form>
+        {!session ? <div className="search-empty panel"><EmptyState icon="search" title="No search results yet" description="Choose a city and niche to see matching businesses here." compact /></div> : session.status === "loading" ? <div className="search-empty panel" role="status"><div className="loading-state"><span className="loading-spinner" /><h2>Loading Demo businesses…</h2><p>Checking the selected radius and preparing sample results.</p></div></div> : session.status === "error" ? <div className="search-empty panel"><EmptyState icon="search" title="The Demo provider is unavailable" description="Your existing results were kept. Try the search again in a moment." compact /></div> : <section className="results-panel panel" aria-labelledby="results-title"><div className="results-header"><div><p className="eyebrow">{session.city.displayName} · {session.criteria.radiusKm} km radius</p><h2 id="results-title">Demo businesses</h2></div><span className="result-disclosure">{session.candidates.length} loaded</span></div><p className="disclosure-copy">Sample data only. This is not every business in the area.</p><div className="result-list" aria-label="Current search results">{session.candidates.length ? session.candidates.map((candidate) => <DemoCandidateCard candidate={candidate} key={candidate.providerId} />) : <p className="no-results">No businesses were found inside this radius.</p>}</div></section>}
       </div>
     </section>
   );
+}
+
+function DemoCandidateCard({ candidate }: { candidate: Candidate }) {
+  return <article className="candidate-card"><div className={`candidate-photo${candidate.photoUrl ? " has-photo" : ""}`} aria-label={candidate.photoUrl ? "Photo listed" : "No photo listed"}>{candidate.photoUrl ? "Photo" : "—"}</div><div className="candidate-copy"><div className="candidate-title-row"><div><h3>{candidate.name}</h3><p>{candidate.category} · {candidate.distanceKm.toFixed(1)} km</p></div></div><p className="candidate-address">{candidate.address}</p><div className="candidate-metadata">{candidate.website ? <a href={candidate.website} target="_blank" rel="noreferrer">Website listed ↗</a> : <span>No website listed</span>}<span>{candidate.phone ?? "No phone listed"}</span><span>{candidate.photoUrl ? "Photo listed" : "No photo listed"}</span></div><small className="source-attribution">{candidate.sourceAttribution}</small></div></article>;
 }
 
 export function LeadsView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
