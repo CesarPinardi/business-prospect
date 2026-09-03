@@ -1064,6 +1064,8 @@ button:disabled {
 
 .candidate-card { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 
+.candidate-card-main { display: grid; grid-column: 1 / -1; grid-template-columns: 62px minmax(0, 1fr); gap: 12px; }
+
 .candidate-photo { display: grid; min-height: 62px; place-items: center; border-radius: 8px; background: var(--lavender); color: var(--lavender-strong); font-family: 'DM Mono', monospace; font-size: 9px; }
 
 .candidate-photo.has-photo { background: var(--mint); color: var(--mint-strong); }
@@ -1085,6 +1087,10 @@ button:disabled {
 .candidate-metadata { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 9px; }
 
 .candidate-metadata a { color: var(--mint-strong); font-weight: 700; }
+
+.candidate-actions { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 8px; margin-left: 74px; }
+
+.candidate-actions a { color: var(--mint-strong); font-size: 10px; font-weight: 700; }
 
 .source-attribution { display: block; margin-top: 7px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 
