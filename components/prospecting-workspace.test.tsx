@@ -1,8 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { ProspectingWorkspace } from "./prospecting-workspace";
-import { STORAGE_KEY } from "./prospecting-storage";
+import { resetStorageForTests, STORAGE_KEY } from "./prospecting-storage";
+
+beforeEach(() => {
+  window.localStorage.clear();
+  resetStorageForTests();
+});
 
 describe("ProspectingWorkspace", () => {
   it("starts in Demo mode with the complete primary navigation", () => {
@@ -141,9 +146,19 @@ describe("ProspectingWorkspace", () => {
     expect(screen.getAllByRole("button", { name: "Saved" }).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole("button", { name: "Saved" })[0]);
 
+    expect(screen.getByRole("heading", { name: "Saved searches" })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Rename" })[0]);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search name" }), { target: { value: "Dentist discovery" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").searches[0].name).toBe("Dentist discovery"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Reopen" })[0]);
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[1]);
+
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").leads[0].searchIds).toHaveLength(2));
     const persisted = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}");
     expect(persisted.leads).toHaveLength(1);
     expect(persisted.leads[0].searchIds).toHaveLength(2);
+    expect(persisted.searches).toHaveLength(1);
   });
 });
