@@ -73,5 +73,10 @@ describe("ProspectingWorkspace", () => {
     expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
     expect(screen.getByText("10 loaded")).toBeInTheDocument();
     expect(screen.getAllByText("Demo provider · sample data")).toHaveLength(10);
+    expect(screen.getAllByTestId("map-marker")).toHaveLength(10);
+    fireEvent.click(screen.getAllByTestId("map-marker")[1]);
+    expect(document.activeElement).toHaveAttribute("id", "candidate-demo:place:jundiai:02");
+    fireEvent.click(screen.getByRole("heading", { name: "Aurora Dental Studio" }));
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("id", "marker-demo:place:jundiai:01"));
   });
 });
