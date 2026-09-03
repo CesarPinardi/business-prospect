@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CITIES, candidateWithinRadius, composeOutreachMessage, filterCandidates, generateDemoCandidates, getCurrentPage, getDemoProviderPage, sortCandidates, usableInternationalPhone, whatsappUrl } from "../components/prospecting-domain";
+import { CITIES, candidateWithinRadius, composeOutreachMessage, filterCandidates, generateDemoCandidates, getCurrentPage, getDemoProviderPage, relativeFollowUpGroup, sortCandidates, todayLocalDate, usableInternationalPhone, whatsappUrl } from "../components/prospecting-domain";
 
 describe("Demo search provider", () => {
   it("returns stable varied candidates and pages", () => {
@@ -50,5 +50,14 @@ describe("Demo search provider", () => {
     expect(whatsappUrl(candidate.phone, "Hello there")).toContain("https://wa.me/5511988881200?text=Hello%20there");
     expect(usableInternationalPhone("(11) 98888-1200")).toBeUndefined();
     expect(whatsappUrl(undefined, "Hello")).toBeUndefined();
+  });
+
+  it("groups follow-ups by local calendar date", () => {
+    const now = new Date(2026, 8, 3, 12);
+    expect(todayLocalDate(now)).toBe("2026-09-03");
+    expect(relativeFollowUpGroup("2026-09-02", now)).toBe("Overdue");
+    expect(relativeFollowUpGroup("2026-09-03", now)).toBe("Today");
+    expect(relativeFollowUpGroup("2026-09-04", now)).toBe("Upcoming");
+    expect(relativeFollowUpGroup(undefined, now)).toBeUndefined();
   });
 });

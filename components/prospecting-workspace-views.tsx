@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { CITIES, filterCandidates, getCurrentPage, validateSettings, whatsappUrl } from "./prospecting-domain";
-import type { ActivityEntry, Candidate, CandidateSelectionSource, IconName, Lead, LeadStatus, ProfileSettings, SearchCriteria, SearchFilter, SearchSession, SearchSort, ViewId } from "./prospecting-workspace-types";
+import { CITIES, filterCandidates, formatDate, getCurrentPage, isSearchThisWeek, relativeFollowUpGroup, validateSettings, whatsappUrl } from "./prospecting-domain";
+import type { ActivityEntry, AppState, Candidate, CandidateSelectionSource, IconName, Lead, LeadStatus, ProfileSettings, SearchCriteria, SearchFilter, SearchSession, SearchSort, ViewId } from "./prospecting-workspace-types";
 import { LEAD_STATUSES } from "./prospecting-workspace-types";
 
 const filterOptions: { value: SearchFilter; label: string }[] = [
@@ -11,12 +11,16 @@ const filterOptions: { value: SearchFilter; label: string }[] = [
   { value: "not-listed", label: "Not listed" },
 ];
 
-export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
+export function DashboardView({ state, onNavigate, onOpenLead }: { state: AppState; onNavigate: (view: ViewId) => void; onOpenLead: (leadId: string) => void }) {
+  const followUpGroups = ["Overdue", "Today", "Upcoming"].map((group) => ({ group, leads: state.leads.filter((lead) => relativeFollowUpGroup(lead.followUpDate) === group) }));
+  const activeFollowUps = state.leads.filter((lead) => lead.followUpDate).length;
+  const searchesThisWeek = state.searches.filter((search) => isSearchThisWeek(search.executedAt)).length;
+  const recentActivities = [...state.activities].reverse().slice(0, 5);
   return (
     <section className="view" aria-labelledby="dashboard-title">
       <div className="hero-grid">
         <div className="page-intro">
-          <p className="eyebrow">Wednesday, September 2</p>
+        <p className="eyebrow">Local workspace</p>
           <h1 id="dashboard-title">Good morning, prospector.</h1>
           <p className="intro-copy">Find the right local businesses, start useful conversations, and keep every follow-up in view.</p>
           <button className="button button-primary" type="button" onClick={() => onNavigate("search")}>
@@ -34,9 +38,9 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
       </div>
 
       <div className="stats-grid" aria-label="Workspace overview">
-        <StatCard label="Saved leads" value="0" detail="Ready for your first find" icon="leads" tone="mint" />
-        <StatCard label="Active follow-ups" value="0" detail="Nothing due today" icon="activity" tone="peach" />
-        <StatCard label="Searches this week" value="0" detail="Demo search is available" icon="search" tone="lavender" />
+        <StatCard label="Saved leads" value={String(state.leads.length)} detail={state.leads.length ? "Ready for a next step" : "Ready for your first find"} icon="leads" tone="mint" />
+        <StatCard label="Active follow-ups" value={String(activeFollowUps)} detail={activeFollowUps ? "Dates are on your radar" : "Nothing scheduled"} icon="activity" tone="peach" />
+        <StatCard label="Searches this week" value={String(searchesThisWeek)} detail={searchesThisWeek ? "Recent discovery work" : "Demo search is available"} icon="search" tone="lavender" />
       </div>
 
       <div className="dashboard-grid">
@@ -48,14 +52,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
             </div>
             <button className="text-button" type="button" onClick={() => onNavigate("pipeline")}>View pipeline <Icon name="arrow" /></button>
           </div>
-          <EmptyState
-            icon="activity"
-            title="Your workspace is clear"
-            description="Search for a business to start building your prospect list."
-            actionLabel="Explore Search"
-            onAction={() => onNavigate("search")}
-            compact
-          />
+          {recentActivities.length ? <ol className="dashboard-activity-list">{recentActivities.map((activity) => <li key={activity.id}><span className="activity-dot" /><div><strong>{activity.kind === "status" ? `${activity.previousValue} → ${activity.newValue}` : `Follow-up ${activity.newValue ? `set for ${formatDate(activity.newValue)}` : "cleared"}`}</strong><time dateTime={activity.createdAt}>{new Date(activity.createdAt).toLocaleString()}</time></div></li>)}</ol> : <EmptyState icon="activity" title="Your workspace is clear" description="Search for a business to start building your prospect list." actionLabel="Explore Search" onAction={() => onNavigate("search")} compact />}
         </section>
 
         <section className="panel mode-panel" aria-labelledby="mode-title">
@@ -70,6 +67,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
           <p className="mode-footnote"><Icon name="activity" /> Local-first by design</p>
         </section>
       </div>
+      <section className="panel follow-up-panel" aria-labelledby="follow-up-title"><div className="panel-heading"><div><p className="eyebrow">Follow-up radar</p><h2 id="follow-up-title">Keep the next step visible</h2></div><button className="text-button" type="button" onClick={() => onNavigate("pipeline")}>Open pipeline <Icon name="arrow" /></button></div><div className="follow-up-groups">{followUpGroups.map(({ group, leads }) => <section key={group} aria-label={`${group} follow-ups`}><div className="follow-up-group-heading"><h3>{group}</h3><span>{leads.length}</span></div>{leads.length ? <div className="follow-up-leads">{leads.map((lead) => <button key={lead.id} className="follow-up-lead" type="button" onClick={() => onOpenLead(lead.id)}><strong>{lead.candidate.name}</strong><span>{lead.followUpDate ? formatDate(lead.followUpDate) : "No date"}</span></button>)}</div> : <p className="muted-copy">No leads here.</p>}</section>)}</div></section>
     </section>
   );
 }
@@ -139,9 +137,9 @@ function FilterControl({ label, value, onChange }: { label: string; value: Searc
   return <label className="filter-control"><span>{label}</span><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value as SearchFilter)}>{filterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
-export function LeadsView({ leads, activities, selectedLeadId, onNavigate, onSelectLead, onUpdateStatus, onUpdateNote, onUpdateMessage }: { leads: Lead[]; activities: ActivityEntry[]; selectedLeadId?: string; onNavigate: (view: ViewId) => void; onSelectLead: (leadId?: string) => void; onUpdateStatus: (leadId: string, status: LeadStatus) => Promise<boolean>; onUpdateNote: (leadId: string, note: string) => Promise<boolean>; onUpdateMessage: (leadId: string, message: string) => Promise<boolean> }) {
+export function LeadsView({ leads, activities, selectedLeadId, onNavigate, onSelectLead, onUpdateStatus, onUpdateFollowUp, onUpdateNote, onUpdateMessage }: { leads: Lead[]; activities: ActivityEntry[]; selectedLeadId?: string; onNavigate: (view: ViewId) => void; onSelectLead: (leadId?: string) => void; onUpdateStatus: (leadId: string, status: LeadStatus) => Promise<boolean>; onUpdateFollowUp: (leadId: string, date: string) => Promise<boolean>; onUpdateNote: (leadId: string, note: string) => Promise<boolean>; onUpdateMessage: (leadId: string, message: string) => Promise<boolean> }) {
   const selectedLead = leads.find((lead) => lead.id === selectedLeadId);
-  if (selectedLead) return <section className="view" aria-labelledby="leads-title"><ViewIntro eyebrow="Your prospects" title="Leads worth following." titleId="leads-title" description="Businesses you choose to save will live here, ready for a thoughtful next step." /><LeadDetail lead={selectedLead} activities={activities.filter((activity) => activity.leadId === selectedLead.id)} onBack={() => onSelectLead(undefined)} onUpdateStatus={onUpdateStatus} onUpdateNote={onUpdateNote} onUpdateMessage={onUpdateMessage} /></section>;
+  if (selectedLead) return <section className="view" aria-labelledby="leads-title"><ViewIntro eyebrow="Your prospects" title="Leads worth following." titleId="leads-title" description="Businesses you choose to save will live here, ready for a thoughtful next step." /><LeadDetail lead={selectedLead} activities={activities.filter((activity) => activity.leadId === selectedLead.id)} onBack={() => onSelectLead(undefined)} onUpdateStatus={onUpdateStatus} onUpdateFollowUp={onUpdateFollowUp} onUpdateNote={onUpdateNote} onUpdateMessage={onUpdateMessage} /></section>;
   if (leads.length) return <section className="view" aria-labelledby="leads-title"><ViewIntro eyebrow="Your prospects" title="Leads worth following." titleId="leads-title" description="Businesses you choose to save will live here, ready for a thoughtful next step." /><section className="lead-list" aria-label="Saved leads">{leads.map((lead) => <LeadListCard key={lead.id} lead={lead} onOpen={() => onSelectLead(lead.id)} />)}</section></section>;
   return (
     <section className="view" aria-labelledby="leads-title">
@@ -164,7 +162,7 @@ export function LeadsView({ leads, activities, selectedLeadId, onNavigate, onSel
   );
 }
 
-function LeadDetail({ lead, activities, onBack, onUpdateStatus, onUpdateNote, onUpdateMessage }: { lead: Lead; activities: ActivityEntry[]; onBack: () => void; onUpdateStatus: (leadId: string, status: LeadStatus) => Promise<boolean>; onUpdateNote: (leadId: string, note: string) => Promise<boolean>; onUpdateMessage: (leadId: string, message: string) => Promise<boolean> }) {
+function LeadDetail({ lead, activities, onBack, onUpdateStatus, onUpdateFollowUp, onUpdateNote, onUpdateMessage }: { lead: Lead; activities: ActivityEntry[]; onBack: () => void; onUpdateStatus: (leadId: string, status: LeadStatus) => Promise<boolean>; onUpdateFollowUp: (leadId: string, date: string) => Promise<boolean>; onUpdateNote: (leadId: string, note: string) => Promise<boolean>; onUpdateMessage: (leadId: string, message: string) => Promise<boolean> }) {
   const [messageDraft, setMessageDraft] = useState(lead.outreachMessage);
   const [noteDraft, setNoteDraft] = useState(lead.note);
   const [messageStatus, setMessageStatus] = useState<"saved" | "saving" | "error">("saved");
@@ -192,7 +190,7 @@ function LeadDetail({ lead, activities, onBack, onUpdateStatus, onUpdateNote, on
   }
 
   const whatsApp = whatsappUrl(lead.candidate.phone, messageDraft);
-  return <section className="lead-detail" aria-labelledby="lead-detail-title"><button className="text-button back-button" type="button" onClick={onBack}>← Back to leads</button><div className="lead-detail-header"><div><p className="eyebrow">Saved lead · {lead.status}</p><h2 id="lead-detail-title">{lead.candidate.name}</h2><p>{lead.candidate.address} · {lead.candidate.category}</p></div><label className="detail-status-label" htmlFor="lead-detail-status">Status<select id="lead-detail-status" aria-label={`Change status for ${lead.candidate.name}`} value={lead.status} onChange={(event) => void onUpdateStatus(lead.id, event.target.value as LeadStatus)}>{LEAD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label></div><div className="lead-detail-grid"><section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">Ready to personalize</p><h3>Outreach message</h3></div><span className={`save-state save-state-${messageStatus}`}>{messageStatus === "saving" ? "Saving…" : messageStatus === "error" ? "Could not save" : "Auto-saved"}</span></div><textarea className="field-control outreach-input" aria-label="Outreach message" value={messageDraft} onChange={(event) => { const message = event.target.value; setMessageDraft(message); saveMessage(message); }} /><div className="detail-actions"><button className="button button-primary" type="button" onClick={copyMessage}>Copy message</button>{whatsApp ? <a className="button button-secondary" href={whatsApp} target="_blank" rel="noreferrer">Open WhatsApp</a> : <button className="button button-secondary" type="button" disabled>WhatsApp unavailable</button>}</div>{copyStatus && <p className="copy-feedback" role="status">{copyStatus}</p>}<p className="field-help">No messages are sent automatically or in bulk.</p></section><section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">Keep context</p><h3>Note</h3></div><span className={`save-state save-state-${noteStatus}`}>{noteStatus === "saving" ? "Saving…" : noteStatus === "error" ? "Could not save" : "Auto-saved"}</span></div><textarea className="field-control note-input" aria-label="Lead note" value={noteDraft} onChange={(event) => { const note = event.target.value; setNoteDraft(note); saveNote(note); }} placeholder="Write a useful note about this lead…" /><p className="field-help">One note, saved automatically on this device.</p></section></div><section className="panel activity-history" aria-labelledby="lead-activity-title"><div className="panel-heading"><div><p className="eyebrow">User-owned timeline</p><h3 id="lead-activity-title">Activity history</h3></div><span>{activities.length}</span></div>{activities.length ? <ol>{[...activities].reverse().map((activity) => <li key={activity.id}><span className="activity-dot" /><div><strong>{activity.previousValue} → {activity.newValue}</strong><time dateTime={activity.createdAt}>{new Date(activity.createdAt).toLocaleString()}</time></div></li>)}</ol> : <p className="muted-copy">Status changes will appear here.</p>}</section></section>;
+  return <section className="lead-detail" aria-labelledby="lead-detail-title"><button className="text-button back-button" type="button" onClick={onBack}>← Back to leads</button><div className="lead-detail-header"><div><p className="eyebrow">Saved lead · {lead.status}</p><h2 id="lead-detail-title">{lead.candidate.name}</h2><p>{lead.candidate.address} · {lead.candidate.category}</p></div><label className="detail-status-label" htmlFor="lead-detail-status">Status<select id="lead-detail-status" aria-label={`Change status for ${lead.candidate.name}`} value={lead.status} onChange={(event) => void onUpdateStatus(lead.id, event.target.value as LeadStatus)}>{LEAD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label></div><div className="lead-detail-grid"><section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">Ready to personalize</p><h3>Outreach message</h3></div><span className={`save-state save-state-${messageStatus}`}>{messageStatus === "saving" ? "Saving…" : messageStatus === "error" ? "Could not save" : "Auto-saved"}</span></div><textarea className="field-control outreach-input" aria-label="Outreach message" value={messageDraft} onChange={(event) => { const message = event.target.value; setMessageDraft(message); saveMessage(message); }} /><div className="detail-actions"><button className="button button-primary" type="button" onClick={copyMessage}>Copy message</button>{whatsApp ? <a className="button button-secondary" href={whatsApp} target="_blank" rel="noreferrer">Open WhatsApp</a> : <button className="button button-secondary" type="button" disabled>WhatsApp unavailable</button>}</div>{copyStatus && <p className="copy-feedback" role="status">{copyStatus}</p>}<p className="field-help">No messages are sent automatically or in bulk.</p></section><section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">Keep context</p><h3>Note</h3></div><span className={`save-state save-state-${noteStatus}`}>{noteStatus === "saving" ? "Saving…" : noteStatus === "error" ? "Could not save" : "Auto-saved"}</span></div><textarea className="field-control note-input" aria-label="Lead note" value={noteDraft} onChange={(event) => { const note = event.target.value; setNoteDraft(note); saveNote(note); }} placeholder="Write a useful note about this lead…" /><p className="field-help">One note, saved automatically on this device.</p><label className="field-label" htmlFor="follow-up-date">Next follow-up</label><input className="field-control" id="follow-up-date" type="date" value={lead.followUpDate ?? ""} onChange={(event) => void onUpdateFollowUp(lead.id, event.target.value)} /><p className="field-help">Choose, change, or clear a date here or in the pipeline.</p></section></div><section className="panel activity-history" aria-labelledby="lead-activity-title"><div className="panel-heading"><div><p className="eyebrow">User-owned timeline</p><h3 id="lead-activity-title">Activity history</h3></div><span>{activities.length}</span></div>{activities.length ? <ol>{[...activities].reverse().map((activity) => <li key={activity.id}><span className="activity-dot" /><div><strong>{activity.kind === "status" ? `${activity.previousValue} → ${activity.newValue}` : `Follow-up ${activity.newValue ? `set for ${formatDate(activity.newValue)}` : "cleared"}`}</strong><time dateTime={activity.createdAt}>{new Date(activity.createdAt).toLocaleString()}</time></div></li>)}</ol> : <p className="muted-copy">Status and follow-up changes will appear here.</p>}</section></section>;
 }
 
 function LeadListCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
