@@ -11,12 +11,16 @@ export type AppState = {
   settings: ProfileSettings;
   searches: SearchRecord[];
   leads: Lead[];
+  activities: ActivityEntry[];
   nicheHistory: string[];
 };
 
 export type SearchFilter = "all" | "listed" | "not-listed";
 export type SearchSort = "relevance" | "distance" | "name";
 export type CandidateSelectionSource = "card" | "marker";
+export type LeadStatus = "New" | "Contacted" | "Interested" | "Follow-up" | "Won" | "Not interested";
+
+export const LEAD_STATUSES: LeadStatus[] = ["New", "Contacted", "Interested", "Follow-up", "Won", "Not interested"];
 
 export type CityOption = {
   id: string;
@@ -70,7 +74,7 @@ export type Lead = {
   providerId: string;
   candidate: Candidate;
   searchIds: string[];
-  status: "New";
+  status: LeadStatus;
   note: string;
   followUpDate?: string;
   outreachMessage: string;
@@ -90,6 +94,15 @@ export type SearchSession = {
   selectionSource?: CandidateSelectionSource;
   status: "idle" | "loading" | "success" | "error";
   error?: string;
+};
+
+export type ActivityEntry = {
+  id: string;
+  leadId: string;
+  kind: "status";
+  previousValue: string;
+  newValue: string;
+  createdAt: string;
 };
 
 export type IconName =

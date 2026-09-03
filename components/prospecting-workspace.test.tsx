@@ -118,6 +118,11 @@ describe("ProspectingWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Leads" }));
     expect(screen.getByRole("heading", { name: "Aurora Dental Studio" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Pipeline" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Change status for Aurora Dental Studio" }), { target: { value: "Contacted" } });
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}").leads[0].status).toBe("Contacted"));
+    expect(screen.getAllByText("Contacted").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Leads" }));
     fireEvent.click(screen.getByRole("button", { name: "Open lead" }));
     expect(screen.getByRole("heading", { name: "Outreach message" })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Outreach message" }), { target: { value: "Hello Aurora" } });
