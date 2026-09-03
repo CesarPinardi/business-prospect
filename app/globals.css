@@ -1001,3 +1001,56 @@ button:disabled {
     animation-iteration-count: 1 !important;
   }
 }
+
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 17px 12px;
+  margin: 24px 0;
+}
+
+.settings-field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.settings-field-wide { grid-column: span 2; }
+
+.settings-field small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.settings-field code { color: var(--mint-strong); }
+
+.message-input {
+  min-height: 92px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding-top: 3px;
+}
+
+.settings-actions .button { margin: 0; }
+
+.save-state {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.save-state-saved { color: var(--mint-strong); }
+
+.field-error { color: #b55237; font-size: 10px; }
+
+@media (max-width: 700px) {
+  .settings-form-grid { grid-template-columns: 1fr; }
+  .settings-field-wide { grid-column: auto; }
+}

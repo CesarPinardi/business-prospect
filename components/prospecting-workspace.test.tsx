@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ProspectingWorkspace } from "./prospecting-workspace";
@@ -46,5 +46,20 @@ describe("ProspectingWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leads" }));
     fireEvent.click(screen.getByRole("button", { name: "Find businesses" }));
     expect(screen.getByRole("heading", { name: "Find your next conversation." })).toBeInTheDocument();
+  });
+
+  it("validates and saves the local profile without losing input", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(await screen.findByText("Check the highlighted fields.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Cesar" } });
+    fireEvent.change(screen.getByLabelText("Business name"), { target: { value: "North Star" } });
+    fireEvent.change(screen.getByLabelText("Offered service"), { target: { value: "Web design" } });
+    fireEvent.change(screen.getByLabelText("Base outreach message"), { target: { value: "Hello {{name}}" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(await screen.findByText("Saved locally.")).toBeInTheDocument();
+    await waitFor(() => expect(window.localStorage.getItem("prospect.local.workspace.v1")).toContain("North Star"));
   });
 });
