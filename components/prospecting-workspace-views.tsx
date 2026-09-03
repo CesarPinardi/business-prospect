@@ -1,5 +1,8 @@
+import { useEffect, useRef, useState } from "react";
+
 import { Icon } from "./prospecting-icons";
-import type { IconName, ViewId } from "./prospecting-workspace-types";
+import { validateSettings } from "./prospecting-domain";
+import type { IconName, ProfileSettings, ViewId } from "./prospecting-workspace-types";
 
 export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
   return (
@@ -183,7 +186,28 @@ export function PipelineView() {
   );
 }
 
-export function SettingsView() {
+export function SettingsView({ settings, onSave, persistenceError }: { settings: ProfileSettings; onSave: (settings: ProfileSettings) => Promise<boolean>; persistenceError?: string }) {
+  const [draft, setDraft] = useState(settings);
+  const draftDirty = useRef(false);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "validation-error" | "persistence-error">("idle");
+  const [errors, setErrors] = useState<Partial<Record<keyof ProfileSettings, string>>>({});
+
+  useEffect(() => { if (!draftDirty.current) setDraft(settings); }, [settings]);
+
+  function update(key: keyof ProfileSettings, value: string) {
+    draftDirty.current = true;
+    setDraft((current) => ({ ...current, [key]: value }));
+    if (errors[key]) setErrors((current) => ({ ...current, [key]: undefined }));
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextErrors = validateSettings(draft);
+    if (Object.keys(nextErrors).length) { setErrors(nextErrors); setStatus("validation-error"); return; }
+    setStatus("saving");
+    if (await onSave(draft)) { draftDirty.current = false; setStatus("saved"); setErrors({}); } else setStatus("persistence-error");
+  }
+
   return (
     <section className="view" aria-labelledby="settings-title">
       <ViewIntro
@@ -192,25 +216,39 @@ export function SettingsView() {
         titleId="settings-title"
         description="A few details will make future outreach feel personal and ready to send."
       />
-      <section className="panel settings-panel">
+      <form className="panel settings-panel" onSubmit={submit}>
         <div className="settings-header">
           <div className="settings-icon"><Icon name="profile" /></div>
           <div>
             <p className="eyebrow">Personal profile</p>
             <h2>No profile details yet</h2>
-            <p>Set up your name, business, service, and base message when you are ready.</p>
+            <p>Saved locally on this device. These details are used to prepare, never send, outreach.</p>
           </div>
         </div>
-        <div className="settings-preview-grid">
-          <SettingPreview label="Your name" />
-          <SettingPreview label="Business name" />
-          <SettingPreview label="Offered service" />
-          <SettingPreview label="Base message" wide />
+        <div className="settings-form-grid">
+          <SettingsField id="settings-name" label="Your name" value={draft.name} error={errors.name} onChange={(value) => update("name", value)} />
+          <SettingsField id="settings-business" label="Business name" value={draft.businessName} error={errors.businessName} onChange={(value) => update("businessName", value)} />
+          <SettingsField id="settings-service" label="Offered service" value={draft.offeredService} error={errors.offeredService} onChange={(value) => update("offeredService", value)} />
+          <div className="settings-field settings-field-wide">
+            <label className="field-label" htmlFor="settings-message">Base outreach message</label>
+            <textarea className="field-control message-input" id="settings-message" value={draft.baseMessage} onChange={(event) => update("baseMessage", event.target.value)} placeholder="Hi {{name}}, I’m {{sender}} from {{business}}..." />
+            {errors.baseMessage && <span className="field-error">{errors.baseMessage}</span>}
+            <small>Optional placeholders: <code>{"{{name}}"}</code>, <code>{"{{business}}"}</code>, <code>{"{{service}}"}</code>, <code>{"{{sender}}"}</code>.</small>
+          </div>
         </div>
-        <button className="button button-secondary" type="button" disabled>Profile settings coming next</button>
-      </section>
+        <div className="settings-actions">
+          <button className="button button-primary" type="submit">{status === "saving" ? "Saving…" : "Save settings"}</button>
+          <span className={`save-state save-state-${status}`} role={status === "validation-error" || status === "persistence-error" ? "alert" : "status"}>
+            {status === "saved" ? "Saved locally." : status === "validation-error" ? "Check the highlighted fields." : status === "persistence-error" ? (persistenceError ?? "Could not save. Your input is still here.") : status === "saving" ? "Saving…" : ""}
+          </span>
+        </div>
+      </form>
     </section>
   );
+}
+
+function SettingsField({ id, label, value, error, onChange }: { id: string; label: string; value: string; error?: string; onChange: (value: string) => void }) {
+  return <div className="settings-field"><label className="field-label" htmlFor={id}>{label}</label><input className="field-control" id={id} value={value} onChange={(event) => onChange(event.target.value)} />{error && <span className="field-error">{error}</span>}</div>;
 }
 
 function ViewIntro({ eyebrow, title, titleId, description }: { eyebrow: string; title: string; titleId: string; description: string }) {
@@ -219,15 +257,6 @@ function ViewIntro({ eyebrow, title, titleId, description }: { eyebrow: string; 
       <p className="eyebrow">{eyebrow}</p>
       <h1 id={titleId}>{title}</h1>
       <p className="intro-copy">{description}</p>
-    </div>
-  );
-}
-
-function SettingPreview({ label, wide = false }: { label: string; wide?: boolean }) {
-  return (
-    <div className={`setting-preview${wide ? " setting-preview-wide" : ""}`}>
-      <span>{label}</span>
-      <strong>Not set</strong>
     </div>
   );
 }

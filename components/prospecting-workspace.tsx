@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
+import { createInitialState } from "./prospecting-domain";
+import { loadAppState, saveAppState } from "./prospecting-storage";
 import {
   DashboardView,
   LeadsView,
@@ -10,7 +12,7 @@ import {
   SearchView,
   SettingsView,
 } from "./prospecting-workspace-views";
-import type { IconName, ViewId } from "./prospecting-workspace-types";
+import type { AppState, IconName, ViewId } from "./prospecting-workspace-types";
 
 type NavigationItem = {
   id: ViewId;
@@ -36,6 +38,47 @@ const viewMeta: Record<ViewId, { eyebrow: string; title: string }> = {
 
 export function ProspectingWorkspace() {
   const [activeView, setActiveView] = useState<ViewId>("dashboard");
+  const [state, setState] = useState<AppState>(() => createInitialState());
+  const stateRef = useRef(state);
+  const persistedStateRef = useRef(state);
+  const commitQueue = useRef(Promise.resolve());
+  const [persistenceError, setPersistenceError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    void loadAppState().then((loaded) => {
+      if (!active) return;
+      stateRef.current = loaded.state;
+      persistedStateRef.current = loaded.state;
+      setState(loaded.state);
+      if (loaded.error) setPersistenceError(loaded.error);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const commit = useCallback(async (next: AppState, options?: { validateSettings?: boolean }): Promise<boolean> => {
+    stateRef.current = next;
+    const operation = commitQueue.current.then(async () => {
+      try {
+        await saveAppState(next, options);
+        persistedStateRef.current = next;
+        setState(next);
+        setPersistenceError(undefined);
+        return true;
+      } catch {
+        if (stateRef.current === next) {
+          stateRef.current = persistedStateRef.current;
+          setState(persistedStateRef.current);
+        }
+        setPersistenceError("Could not save local data. Your current input was kept; try again or check browser storage permissions.");
+        return false;
+      }
+    });
+    commitQueue.current = operation.then(() => undefined);
+    return operation;
+  }, []);
+
+  const handleSaveSettings = useCallback((settings: AppState["settings"]): Promise<boolean> => commit({ ...stateRef.current, settings }, { validateSettings: true }), [commit]);
 
   return (
     <div className="app-shell">
@@ -100,7 +143,7 @@ export function ProspectingWorkspace() {
           {activeView === "search" && <SearchView />}
           {activeView === "leads" && <LeadsView onNavigate={setActiveView} />}
           {activeView === "pipeline" && <PipelineView />}
-          {activeView === "settings" && <SettingsView />}
+          {activeView === "settings" && <SettingsView settings={state.settings} onSave={handleSaveSettings} persistenceError={persistenceError} />}
         </main>
       </div>
     </div>
