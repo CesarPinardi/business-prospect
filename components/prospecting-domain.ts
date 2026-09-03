@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
 export const DEFAULT_SEARCH_CRITERIA: SearchCriteria = { cityId: "", niche: "", radiusKm: 5, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" };
 
 export function createInitialState(): AppState {
-  return { settings: { ...DEFAULT_SETTINGS }, searches: [], leads: [], nicheHistory: [] };
+  return { settings: { ...DEFAULT_SETTINGS }, searches: [], leads: [], activities: [], nicheHistory: [] };
 }
 
 export function getLeadByProviderId(leads: Lead[], providerId: string): Lead | undefined {
