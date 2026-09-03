@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { createInitialState } from "./prospecting-domain";
+import { candidateWithinRadius, createInitialState, createId, getCity, getDemoProviderPage } from "./prospecting-domain";
 import { loadAppState, saveAppState } from "./prospecting-storage";
 import {
   DashboardView,
@@ -12,7 +12,7 @@ import {
   SearchView,
   SettingsView,
 } from "./prospecting-workspace-views";
-import type { AppState, IconName, ViewId } from "./prospecting-workspace-types";
+import type { AppState, IconName, SearchCriteria, SearchRecord, SearchSession, ViewId } from "./prospecting-workspace-types";
 
 type NavigationItem = {
   id: ViewId;
@@ -43,6 +43,7 @@ export function ProspectingWorkspace() {
   const persistedStateRef = useRef(state);
   const commitQueue = useRef(Promise.resolve());
   const [persistenceError, setPersistenceError] = useState<string>();
+  const [session, setSession] = useState<SearchSession | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -79,6 +80,32 @@ export function ProspectingWorkspace() {
   }, []);
 
   const handleSaveSettings = useCallback((settings: AppState["settings"]): Promise<boolean> => commit({ ...stateRef.current, settings }, { validateSettings: true }), [commit]);
+
+  const handleSearch = useCallback((criteria: SearchCriteria) => {
+    const city = getCity(criteria.cityId);
+    if (!city || !criteria.niche.trim() || !Number.isInteger(criteria.radiusKm) || criteria.radiusKm < 1 || criteria.radiusKm > 10) return;
+    const loadingSession: SearchSession = { criteria, city, candidates: [], providerPage: 0, hasNextPage: false, currentPage: 1, status: "loading" };
+    setSession(loadingSession);
+    window.setTimeout(() => {
+      void (async () => {
+        try {
+          const providerPage = getDemoProviderPage(city, criteria.niche, 0);
+          const candidates = providerPage.filter((candidate) => candidateWithinRadius(candidate, city, criteria.radiusKm));
+          const search: SearchRecord = { ...criteria, id: createId("search"), name: `${criteria.niche.trim()} in ${city.displayName.split(",")[0]}`, city, providerMode: "Demo", executedAt: new Date().toISOString(), loadedCount: candidates.length, providerPage: 0, hasNextPage: providerPage.length === 10, candidates };
+          const currentState = stateRef.current;
+          const niche = criteria.niche.trim();
+          const nextHistory = [niche, ...currentState.nicheHistory.filter((item) => item.toLowerCase() !== niche.toLowerCase())].slice(0, 10);
+          if (!await commit({ ...currentState, searches: [search, ...currentState.searches], nicheHistory: nextHistory })) {
+            setSession({ ...loadingSession, status: "error", error: "Search ran, but its history could not be saved locally." });
+            return;
+          }
+          setSession({ searchId: search.id, criteria, city, candidates, providerPage: 0, hasNextPage: providerPage.length === 10, currentPage: 1, selectedCandidateId: candidates[0]?.providerId, status: "success" });
+        } catch {
+          setSession({ ...loadingSession, status: "error", error: "The Demo provider is unavailable. No existing results were discarded." });
+        }
+      })();
+    }, 80);
+  }, [commit]);
 
   return (
     <div className="app-shell">
@@ -140,7 +167,7 @@ export function ProspectingWorkspace() {
 
         <main className="page-content">
           {activeView === "dashboard" && <DashboardView onNavigate={setActiveView} />}
-          {activeView === "search" && <SearchView />}
+          {activeView === "search" && <SearchView session={session} nicheHistory={state.nicheHistory} onSearch={handleSearch} />}
           {activeView === "leads" && <LeadsView onNavigate={setActiveView} />}
           {activeView === "pipeline" && <PipelineView />}
           {activeView === "settings" && <SettingsView settings={state.settings} onSave={handleSaveSettings} persistenceError={persistenceError} />}

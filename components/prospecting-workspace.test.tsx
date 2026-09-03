@@ -1,7 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { ProspectingWorkspace } from "./prospecting-workspace";
+import { resetStorageForTests } from "./prospecting-storage";
+
+beforeEach(() => {
+  window.localStorage.clear();
+  resetStorageForTests();
+});
 
 describe("ProspectingWorkspace", () => {
   it("starts in Demo mode with the complete primary navigation", () => {
@@ -61,5 +67,33 @@ describe("ProspectingWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
     expect(await screen.findByText("Saved locally.")).toBeInTheDocument();
     await waitFor(() => expect(window.localStorage.getItem("prospect.local.workspace.v1")).toContain("North Star"));
+  });
+
+  it("searches deterministic Demo businesses inside the selected radius", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "jundiai" } });
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "dentist" } });
+    fireEvent.change(screen.getByLabelText("Radius"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+    expect(screen.getByText("10 loaded")).toBeInTheDocument();
+    expect(screen.getAllByText("Demo provider · sample data")).toHaveLength(10);
+  });
+
+  it("shows invalid, loading, and provider-error search states", async () => {
+    render(<ProspectingWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(screen.getByText("Select a city, enter a niche, and choose a radius from 1 to 10 km.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "jundiai" } });
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "dentist" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(screen.getByRole("heading", { name: "Loading Demo businesses…" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Demo businesses" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Business niche"), { target: { value: "[provider-error]" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search businesses" }));
+    expect(await screen.findByRole("heading", { name: "The Demo provider is unavailable" })).toBeInTheDocument();
   });
 });

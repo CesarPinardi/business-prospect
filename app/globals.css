@@ -993,6 +993,50 @@ button:disabled {
   .settings-header { gap: 11px; }
 }
 
+.results-panel { padding: 24px; }
+
+.results-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+
+.results-header h2 { margin: 7px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 21px; font-weight: 600; letter-spacing: -0.05em; }
+
+.result-disclosure { padding: 7px 9px; border-radius: 7px; background: var(--mint); color: var(--mint-strong); font-family: 'DM Mono', monospace; font-size: 10px; white-space: nowrap; }
+
+.disclosure-copy { margin: 13px 0 0; color: var(--ink-soft); font-size: 11px; line-height: 1.55; }
+
+.result-list { display: grid; gap: 9px; margin-top: 18px; }
+
+.candidate-card { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+
+.candidate-photo { display: grid; min-height: 62px; place-items: center; border-radius: 8px; background: var(--lavender); color: var(--lavender-strong); font-family: 'DM Mono', monospace; font-size: 9px; }
+
+.candidate-photo.has-photo { background: var(--mint); color: var(--mint-strong); }
+
+.candidate-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+
+.candidate-title-row h3 { margin: 0; font-size: 14px; }
+
+.candidate-title-row p, .candidate-address { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+
+.candidate-address { color: var(--ink-soft); font-size: 11px; }
+
+.candidate-metadata { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 9px; }
+
+.candidate-metadata a { color: var(--mint-strong); font-weight: 700; }
+
+.source-attribution { display: block; margin-top: 7px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+
+.form-error { margin: 12px 0 0; color: #b55237; font-size: 11px; line-height: 1.5; }
+
+.loading-state { display: grid; min-height: 260px; place-items: center; align-content: center; gap: 10px; text-align: center; }
+
+.loading-state h2 { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 20px; }
+
+.loading-state p { margin: 0; color: var(--muted); font-size: 11px; }
+
+.loading-spinner { width: 22px; height: 22px; border: 2px solid var(--line); border-top-color: var(--mint-strong); border-radius: 50%; animation: spin 800ms linear infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;
