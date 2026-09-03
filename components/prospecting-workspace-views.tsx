@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "./prospecting-icons";
-import { CITIES, validateSettings } from "./prospecting-domain";
+import { CITIES, DEFAULT_SEARCH_CRITERIA, validateSettings } from "./prospecting-domain";
 import type { Candidate, IconName, ProfileSettings, SearchCriteria, SearchSession, ViewId } from "./prospecting-workspace-types";
 
 export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
@@ -68,8 +68,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (view: ViewId) => vo
 }
 
 export function SearchView({ session, nicheHistory, onSearch }: { session: SearchSession | null; nicheHistory: string[]; onSearch: (criteria: SearchCriteria) => void }) {
-  const emptyCriteria: SearchCriteria = { cityId: "", niche: "", radiusKm: 5, websiteFilter: "all", photoFilter: "all", phoneFilter: "all", sort: "relevance" };
-  const [criteria, setCriteria] = useState<SearchCriteria>(session?.criteria ?? emptyCriteria);
+  const [criteria, setCriteria] = useState<SearchCriteria>(session?.criteria ?? DEFAULT_SEARCH_CRITERIA);
   const canSearch = Boolean(criteria.cityId && criteria.niche.trim() && Number.isInteger(criteria.radiusKm) && criteria.radiusKm >= 1 && criteria.radiusKm <= 10);
 
   return (
